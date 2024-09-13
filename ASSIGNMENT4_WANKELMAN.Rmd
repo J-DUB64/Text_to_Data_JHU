@@ -1,0 +1,427 @@
+---
+title: "ASSIGNMENT4_WANKELMAN"
+output: pdf_document
+date: "2024-02-19"
+---
+#Question 1: Part 1: Describe why your question is interesting, and briefly explain how New York Times data can address it.
+Research Question: What are the economic impacts of cybersecurity threats on energy infrastructure as reported in The New York Times over the past decade, and what mitigation strategies have been highlighted by governments and the private sector?
+
+This research question is compelling because it addresses the intersection of cybersecurity, economic stability, and energy infrastructure, which are critical pillars of national and global security. The economic implications of cybersecurity threats to energy infrastructure are vast, potentially affecting everything from stock markets to the average consumer's utility bill. Moreover, understanding the mitigation strategies that have been implemented or proposed can provide insights into the effectiveness of various approaches to securing energy infrastructure against cyber threats.
+
+The New York Times, with its comprehensive coverage of both domestic and international events, offers a rich dataset for exploring this question. The newspaper's articles can provide a chronological narrative of significant cybersecurity incidents affecting energy infrastructure, detailing the nature of the threats, the immediate economic fallout, and the longer-term economic implications. By analyzing this coverage, researchers can identify patterns in how cybersecurity threats to energy infrastructure are reported, assess public and governmental awareness of these issues, and evaluate the economic impacts of such incidents. Additionally, The New York Times' coverage of policy responses, government actions, and private sector initiatives can offer valuable insights into the mitigation strategies that have been adopted or discussed. This analysis can reveal trends in the prioritization of cybersecurity in the energy sector, shifts in policy and investment, and the evolving dialogue between public and private entities on how best to protect critical infrastructure.
+
+### JHU resources
+
+* [Databases dedicated to text mining.] (https://guides.library.jhu.edu/c.php?g=1240337)
+
+*[List of JHU Database] (https://databases.library.jhu.edu)
+
+*[Github List of Free APIs] (https://github.com/public-apis/public-apis)
+
+*[US Government API Sources] (https://api.data.gov/)
+
+*[Random Website w/ APIs from Google Search] (https://mixedanalytics.com/blog/list-actually-free-open-no-auth-needed-apis/)
+
+```{r}
+install.packages("devtools")
+devtools::install_github("mkearney/nytimes")
+```
+
+```{r}
+install.packages("httr2")
+```
+
+```{r}
+# load nytimes package
+library(nytimes)
+
+# Load Libaraies
+library(quanteda)
+library(httr)
+library(httr2)
+
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(wordcloud2)
+library(readtext)
+library(tm)
+library(jsonview)
+
+
+```
+
+```{r}
+api_key = "SYqZv9kZCeIvK61SKOOyVAzC5DY9mx4C"
+```
+
+
+```{r}
+nyt_cyber_attack_articles = nyt_search(q = "cybersecurity", 
+                              n = 20, 
+                              end_date = "20230101", 
+                              fq = 'United States',
+                              apikey = api_key)
+
+#for some reason when I included a more specific search result I was getting this error (  Error in names(x) <- value : 'names' attribute must be the same length as the vector) with this code nyt_df = as.data.frame(nyt_cyber_attack_articles).  So I reduce my words from "cybersecurity energy infrastructure economyinfrastructure economy to just cyber security"  to just "cybersecurity"
+#https://stackoverflow.com/questions/10566473/names-attribute-must-be-the-same-length-as-the-vector
+
+#https://github.com/mkearney/newsAPI
+
+```
+
+
+```{r}
+class(nyt_cyber_attack_articles)
+```
+
+
+```{r}
+nyt_cyber_attack_articles[1:2]
+```
+Status: 200 means that your request to the New York Times API for articles related to cybersecurity was successful, and the API responded with the data you requested, which is the list of articles matching your query parameters. The Content-Type: application/json part indicates that the data is returned in JSON format, and Size: 229 kB specifies the size of the data returned. (OpenAI. (2024). Explanation of HTTP status code 200 in API responses)
+
+```{r}
+str(nyt_cyber_attack_articles)
+```
+
+
+#2. Read some of the headlines you get from each query (there are ten include with each query). Does it seem like your search queries are retrieving articles that are relevant to the research question you chose?
+```{r}
+nyt_df = as.data.frame(nyt_cyber_attack_articles)
+
+#columns nyt_df
+head(nyt_df)
+```
+The headlines from my first request seem to be partially relevant to my research question regarding the economic impacts of cybersecurity threats on energy infrastructure. Specifically, the headline "How Hackers Used One Software Flaw to Take Down a County Computer System" directly pertains to cybersecurity threats, indicating that such incidents are significant enough to disrupt essential services. This article could offer insights into the economic impacts of cybersecurity threats, especially if the mobile operator is part of the broader energy infrastructure network or the cyberattack has broader implications for the energy sector's operational security.
+
+
+```{r}
+?corpus
+```
+
+
+```{r}
+nyt_corpus = corpus(nyt_df,
+                    text_field = "headline")
+
+
+summary(nyt_corpus)
+```
+
+HTTR2 Docs - https://httr2.r-lib.org/
+
+A request URL is generally composed of a base URL: https://api.nytimes.com/svc/search/v2/
+
+Parameters: /articlesearch.json?q={query}&q={filter}
+
+And Auth: &api-key=yourkey
+
+The most basic way is to compose the URL yourself and send it off.
+
+# Question 2: Part 1: How many hits do you get in a given year range for your search query? (Pick a years for start and end date.)
+#### If you don't have a package like what we do with like what we were using with https://github.com/mkearney/newsAPI
+
+```{r}
+nyt_api_url = sprintf("https://api.nytimes.com/svc/search/v2/articlesearch.json?q=cybersecurity&energy&economy&sort=oldest&api-key=SYqZv9kZCeIvK61SKOOyVAzC5DY9mx4C")
+
+nyt_api_url
+
+```
+
+
+
+```{r}
+# create a Request
+my_request = request(nyt_api_url)
+
+print(response)
+
+#R-lib. httr2. Retrieved February 20, 2024, from https://httr2.r-lib.org/
+
+#New York Times. (2024). New York Times Article Search API documentation. Retrieved 2024 Feburary 17 from https://developer.nytimes.com/docs/articlesearch-product/1/overview
+
+#GeeksforGeeks. How to make HTTP request using httr package in R language. Retrieved February 20, 2024, from https://www.geeksforgeeks.org/how-to-make-http-request-using-httr-package-in-r-language/
+
+#Hadley Wickham. (2020). httr: Tools for Working with URLs and HTTP. R package version 1.4.2. https://CRAN.R-project.org/package=httr
+
+```
+
+
+```{r}
+?req_headers
+```
+
+
+```{r}
+#add options
+my_request %>% req_headers("Accept" = "application/json")
+```
+
+```{r}
+#Make Request
+nyt_resp = req_perform(my_request)
+
+#Check Response
+class(nyt_resp)
+```
+
+
+#Question 2: Part 2: Read some of the headlines you get from each query (there are ten include with each query). Does it seem like your search queries are retrieving articles that are relevant to the research question you chose?
+```{r}
+nyt_json = nyt_resp %>% resp_body_json
+
+hits = nyt_json$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+nyt_json
+
+```
+
+```{r}
+my_request = request('https://api.nytimes.com/svc/search/v2/articlesearch.json?q=%s&api-key=%s')
+my_request = my_request %>% req_headers("Accept" = "application/json" )
+my_request = my_request %>% 
+  req_url_query(q = 'Cybersecurity Energy Infrastructure Economy', "api_key" =api_key)
+
+#nyt_resp = req_perform(my_request):  I could not get this code to work
+
+nyt_json = nyt_resp %>% resp_body_json()
+
+hits = nyt_json$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+#R way to extract headlines from headline column  (OpenAI ChatGPT, 2024. Assistance in developing R code for JSON parsing and headline extraction. OpenAI.)
+if(hits > 0) {
+    headlines = sapply(nyt_json$response$docs, function(a) a$headline$main)
+    cat("Headlines:\n", paste(headlines, collapse = "\n"))
+}
+
+```
+By refining my search criteria, I significantly improved the relevance of the articles retrieved, though this refinement also led to an increase in the volume of articles. The search proved successful in sourcing articles pertinent to my research on cybersecurity within the energy sector. With 3,318 hits, the headlines spanned a range of topics, from pipeline hacks and government cybersecurity strategies to legislative challenges, closely mirroring my research interests.
+
+For instance, headlines such as "The New York Times: Cybercrime & Companies Won't Help National Cybersecurity Without Waivers" precisely targeted my research questions, underscoring the heightened focus on cybersecurity risks and the corresponding responses within the energy infrastructure. This outcome affirms the search's efficacy in generating valuable insights for my study, emphasizing the incidents and the policy measures relevant to cybersecurity in the energy domain..
+
+#Question 2 Part: 3 - How could your search be improved? Try your improvement concepts and compare to your initial query.
+```{r}
+nyt_api_url_2 = sprintf("https://api.nytimes.com/svc/search/v2/articlesearch.json?q=cybersecurity&energy&economy&infrastructure&sort=newest&&end_date=20230101&api-key=SYqZv9kZCeIvK61SKOOyVAzC5DY9mx4C")
+
+nyt_api_url_2
+
+```
+
+```{r}
+# create a Request
+my_request_2 = request(nyt_api_url_2)
+
+print(response)
+
+#R-lib. httr2. Retrieved February 20, 2024, from https://httr2.r-lib.org/
+
+#New York Times. (2024). New York Times Article Search API documentation. Retrieved 2024 Feburary 17 from https://developer.nytimes.com/docs/articlesearch-product/1/overview
+
+#GeeksforGeeks. How to make HTTP request using httr package in R language. Retrieved February 20, 2024, from https://www.geeksforgeeks.org/how-to-make-http-request-using-httr-package-in-r-language/
+
+#Hadley Wickham. (2020). httr: Tools for Working with URLs and HTTP. R package version 1.4.2. https://CRAN.R-project.org/package=httr
+
+```
+
+```{r}
+#add options
+my_request_2 %>% req_headers("Accept" = "application/json")
+```
+
+
+```{r}
+#Make Request
+nyt_resp_2 = req_perform(my_request_2)
+
+#Check Response
+class(nyt_resp_2)
+```
+
+
+```{r}
+nyt_json_2 = nyt_resp_2 %>% resp_body_json
+
+hits = nyt_json_2$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+nyt_json_2
+
+```
+
+
+```{r}
+my_request_2 = request('https://api.nytimes.com/svc/search/v2/articlesearch.json?q=%s&api-key=%s')
+my_request_2 = my_request_2 %>% req_headers("Accept" = "application/json" )
+my_request_2 = my_request_2 %>% 
+  req_url_query(q = 'Cybersecurity Energy Infrastructure Economy', "api_key" =api_key)
+
+#nyt_resp = req_perform(my_request):  I could not get this code to work
+
+nyt_json_2 = nyt_resp_2 %>% resp_body_json()
+
+hits = nyt_json_2$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+if(hits > 0) {
+    headlines = sapply(nyt_json$response$docs, function(a) a$headline$main)
+    cat("Headlines:\n", paste(headlines, collapse = "\n"))
+}
+
+```
+
+In refining my API call strategy to the New York Times, I aimed to enhance the precision of the search results, explicitly targeting the economic impacts of cybersecurity threats on energy infrastructure. Initially, my search yielded 3,318 articles, a substantial volume that, while rich in content, necessitated further refinement. By incorporating "infrastructure" into my query and adjusting the search to prioritize the most recent articles with an end date set to January 1, 2023, I effectively honed in on the nuances of my research topic.
+
+This refined approach resulted in a slightly reduced hit count of 3,108 hits, indicating a slightly more focused dataset. Notably, this adjustment from an "oldest" to "newest" sort criterion, coupled with the explicit inclusion of an end date, was instrumental in curating a dataset that mirrored the evolving discourse on cybersecurity within the energy sector. The articles captured through this refined lens span various relevant themes, from pipeline hacks to governmental and sector-wide cybersecurity strategies, and legislative frameworks. Headlines such as "Retired General to Oversee Security for Nuclear Weapons Labs" and "The New York Times: Cybercrime" underscore the multifaceted nature of cybersecurity threats and the comprehensive measures to mitigate these risks.
+
+This deliberate refinement of the API call highlights the critical role of precision in digital research, facilitating a thorough sift through extensive datasets to distill insights directly relevant to the economic impacts and defense strategies against cybersecurity threats within the energy infrastructure sphere. Moving forward, to further refine my search and ensure even greater relevance and specificity, I suggest applying additional filters such as SpecifyingcSpecifyin geographic location to the United States or focusing on articles that mention key legislation or regulatory measures.
+
+# Question 3: Part 1: Collect data from Top Stories API for a section of your interest and create a corpus. What data did you get back? How is this different than Article API?
+
+```{r}
+library(httr2)
+
+nyt_api_url_topstories = "https://api.nytimes.com/svc/topstories/v2/technology.json?api-key=SYqZv9kZCeIvK61SKOOyVAzC5DY9mx4C"
+
+nyt_api_url_topstories
+
+
+```
+
+
+```{r}
+# create a Request
+my_request_topstories = request(nyt_api_url_topstories) %>%
+  req_headers("Accept" = "application/json")
+
+print(response)
+
+#R-lib. httr2. Retrieved February 20, 2024, from https://httr2.r-lib.org/
+
+```
+
+```{r}
+nyt_resp_topstories = req_perform(my_request_topstories)
+```
+
+```{r}
+class(nyt_resp_topstories)
+```
+
+```{r}
+head(nyt_resp_topstories)
+
+```
+
+```{r}
+
+nyt_resp_topstories_json = resp_body_json(nyt_resp_topstories)
+
+
+hits = nyt_resp_topstories_json$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+
+print(nyt_resp_topstories_json)
+
+```
+
+```{r}
+# Inspect the structure of the JSON response
+str(nyt_resp_topstories_json)
+
+```
+
+```{r}
+#R oldway as discussed on video
+topstories_titles = sapply(nyt_resp_topstories_json$results, function(story) story$title)
+
+# Create a corpus of topstories titles
+topstories_corpus = corpus(topstories_titles)
+
+
+print(summary(topstories_corpus))
+```
+
+
+```{r}
+head(topstories_titles, n=20)
+```
+The New York Times Top Stories API is designed to provide the top news stories from various sections of the NYT, such as world, technology, health, etc. Unlike the Article Search API, the Top Stories API does not support direct filtering by keywords or topics like "cybersecurity" through the API request itself. The endpoint delivers the latest top stories as curated by The New York Times, without the ability to apply custom filters such as keywords at the API level. To access stories on specific topics like "cybersecurity" using the Top Stories API, one must manually filter the results after fetching the latest top stories, as the API prioritizes editorial curation over customizable searches.
+
+Public APIs. New York Times API. Retrieved 2024 from https://publicapis.io/new-york-times-api
+
+
+# Question 4: Part 1:  Collect data from Books API and create a corpus.
+
+```{r}
+library(httr2)
+
+nyt_api_url_books = sprintf("https://api.nytimes.com/svc/books/v3/lists/current/hardcover-nonfiction.json?q=cybersecurity&energy&economy&infrastructure&sort=newest&&end_date=20230101&api-key=SYqZv9kZCeIvK61SKOOyVAzC5DY9mx4C")
+
+nyt_api_url_books
+
+```
+
+```{r}
+# create a Request
+my_request_books = request(nyt_api_url_books)
+
+print(response)
+
+#R-lib. httr2. Retrieved February 20, 2024, from https://httr2.r-lib.org/
+
+
+```
+
+```{r}
+#add options
+my_request_books %>% req_headers("Accept" = "application/json")
+```
+
+```{r}
+#Make Request
+nyt_resp_books = req_perform(my_request_books)
+
+#Check Response
+class(nyt_resp_books)
+```
+
+```{r}
+
+nyt_resp_books = req_perform(my_request_books)
+
+
+nyt_resp_books_json = resp_body_json(nyt_resp_books)
+
+
+hits = nyt_resp_books_json$response$meta$hits
+cat("Number of hits:", hits, "\n")
+
+
+print(nyt_resp_books_json)
+
+```
+
+```{r}
+#R oldway as discussed on video
+book_titles = sapply(nyt_resp_books_json$results$books, function(book) book$title)
+
+# Create a corpus of book titles
+books_corpus = corpus(book_titles)
+
+
+print(summary(books_corpus))
+
+
+```
+
+```{r}
+head(book_titles, n=20)
+```
+The titles extracted from The New York Times' hardcover nonfiction list, including "THE WAGER" through "HITS, FLOPS, AND OTHER ILLUSIONS," do not align with the research question on cybersecurity's economic impacts on energy infrastructure. These titles reflect a broad array of subjects, from personal stories to historical analyses, without directly addressing cybersecurity in the energy sector. Despite efforts to filter the book list for relevant topics using the API request, the process did not go as planned, and time ran out, resulting in a less focused selection on cybersecurity in energy infrastructure, underscoring the challenge of extracting targeted information from a generalized dataset.
