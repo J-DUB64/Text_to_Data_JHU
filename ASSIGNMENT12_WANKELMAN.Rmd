@@ -1,0 +1,641 @@
+---
+title: "ASSIGNMENT8_WANKELMAN"
+output: pdf_document
+date: "2024-03-15"
+---
+Shifting the focus of my research from carbon pricing policies to the Paris Agreement represents a strategic pivot towards analyzing a broader and more global aspect of climate change discourse. The Paris Agreement, a landmark in international efforts to combat climate change, provides a unique lens through which public sentiment and understanding can be gauged. Unlike carbon pricing, which can often be mired in local or regional policy specifics, the Paris Agreement offers a global platform that elicits reactions from a broad spectrum of individuals, enriching the diversity and depth of public discourse captured for analysis. This switch allows for a more comprehensive understanding of global perspectives on climate action, transcending the boundaries of specific carbon management strategies to include broader commitments to reducing carbon emissions and enhancing sustainability efforts worldwide.
+
+Moreover, the Paris Agreement's prominence in media and public discussions ensures a rich dataset of opinions, debates, and sentiments that can be leveraged to understand public perception at a larger scale. This global framework inherently involves many stakeholders, including nations, corporations, and individuals, thus offering a multifaceted view of the climate change conversation. By focusing on the Paris Agreement, my research taps into a broader narrative of climate action, encompassing not only the technical and policy-oriented aspects of carbon management but also the social, economic, and ethical considerations that shape global climate governance. This holistic approach enhances the academic rigor of my project. It increases its relevance to policymakers, activists, the international community, and all stakeholders in successfully implementing the Paris Agreement.
+
+Research Question: How does public discourse on Reddit regarding the Paris Agreement reflect broader societal attitudes towards international climate action, and what can this tell us about the global community's readiness to engage with and support the commitments outlined in the agreement?
+
+```{r}
+# Load Libraries
+library(quanteda)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(readtext)
+library(tm)
+library(jsonview)
+library(quanteda)
+library(stopwords)
+library(stringr)
+library(ldatuning)
+library(plotly)
+library(tidyr)
+library(LDAvis)
+library(tsne)
+library(Rtsne)
+library(lda)
+```
+
+```{r}
+#Load CSV
+carbon_credit_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 12/reddit_discussions_paris_agreement.csv",
+                                stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(carbon_credit_reddit)
+```
+
+```{r}
+head(carbon_credit_reddit, n = 5)
+```
+
+```{r}
+#Check for NA
+anyNA(carbon_credit_reddit$comment_body)
+```
+
+```{r}
+#Check how many NA's
+sum(is.na(carbon_credit_reddit$comment_body))
+
+```
+
+```{r}
+#Check how many NA's
+which(is.na(carbon_credit_reddit$comment_body))
+
+
+```
+
+```{r}
+# Prepare the data in the reddit csv file
+carbon_credit_reddit$text = paste(carbon_credit_reddit$comment_body)
+
+```
+
+
+```{r}
+# Clean and prepare the text
+clean_body_text = carbon_credit_reddit %>%
+  mutate(text = str_remove_all(text, "\\n")) %>% #remove all newline characters
+  mutate(text = str_remove_all(text, "\\r")) %>% #removes all occurrences of \r from the text column
+  mutate(text = str_remove_all(text, "\\t")) #remove all tab characters 
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+# Create a corpus
+corpus_body = corpus(clean_body_text$text)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_body_trim = tokens(corpus_body, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+tokens_remove(pattern=stopwords('en'))
+dfm_body = dfm(tokens_body_trim) %>%
+dfm_trim(min_termfreq = 0.4, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.3,
+         docfreq_type = "prop")
+
+
+top_terms_body = dfm_body
+top_terms_body
+```
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+
+expanded_stopwords = c(
+  stopwords(language = 'en', source = 'snowball'),
+  stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords(language = 'en', source = 'smart'),
+  stopwords(language = 'en', source = 'marimo'),
+  stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+  ) %>%
+  unique()
+```
+
+
+```{r}
+# Rerun the tokenize the corpus with extended stopwords
+tokens_body = tokens(corpus_body, remove_punct = TRUE, 
+          remove_url = TRUE, 
+          remove_numbers = TRUE,
+          remove_symbols = TRUE) %>%
+tokens_remove(pattern = expanded_stopwords)
+dfm_body = dfm(tokens_body) %>%
+dfm_trim(min_termfreq = 0.5, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.4, 
+         docfreq_type = "prop")
+
+top_terms = topfeatures(dfm_body, 20)
+print(top_terms)
+```
+
+```{r}
+library(viridis)
+
+# Convert the top_terms to a data frame for plotting
+top_terms_df = data.frame(term = names(top_terms), frequency = top_terms)
+
+# Order the terms by frequency for better visualization
+top_terms_df = top_terms_df[order(-top_terms_df$frequency), ]
+
+# Create the bar plot
+ggplot(top_terms_df, aes(x = reorder(term, frequency), y = frequency)) +
+  geom_bar(stat = "identity") +
+  scale_color_viridis(discrete = TRUE, option = "D") +
+  theme_minimal() +
+  labs(title = "Top 20 Terms Frequency", x = "Term", y = "Frequency") +
+  coord_flip() + # Flip coordinates for a horizontal bar plot
+  theme(plot.title = element_text(hjust = 0.5)) # Center the plot title
+
+
+```
+
+```{r}
+find("terms")
+
+```
+
+
+```{r}
+library(topicmodels)
+# dfm_body is properly formatted for use with topicmodels
+dtm_body = convert(dfm_body, to = 'topicmodels')
+
+
+# Explicitly use the LDA function from the topicmodels package
+lda_body_model = topicmodels::LDA(dtm_body, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_body_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_body_terms = terms(lda_body_model, 10) 
+print(lda_body_terms)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_body_tune = FindTopicsNumber(
+  dtm_body,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_body_tune$results, is.finite))){
+  plot(lda_body_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 15
+lda_optimal_model = LDA(dtm_body, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_terms = topicmodels::terms(lda_optimal_model, 15) 
+print(lda_optimal_terms)
+
+```
+
+
+```{r}
+# Also used for SVMs later in the class
+
+library(e1071)
+```
+
+```{r}
+# Let's actually train our NB model (Very exciting!)
+# As always, check the documentation
+?naiveBayes
+```
+
+```{r}
+#Load CSV
+train_data = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 12/reddit_discussions_paris_agreement.csv",
+                              stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(train_data)
+```
+
+```{r}
+
+dependent_variable = as.factor(train_data$"sentiment_comment")
+
+```
+
+```{r}
+#need a DFM, the basis for creating all models
+train_corpus = corpus(train_data, text_field = "comment_body")
+```
+
+```{r}
+# DFM creation and trimming
+tokens_body_trim = tokens(train_corpus, 
+                           remove_punct = TRUE, 
+                           remove_url = TRUE, 
+                           remove_numbers = TRUE,
+                           remove_symbols = TRUE) %>%
+                    tokens_remove(pattern=stopwords('en'))
+
+train_dfm_body = dfm(tokens_body_trim) %>%
+            dfm_trim(min_termfreq = 0.4, 
+                     termfreq_type = 'quantile', 
+                     max_docfreq = 0.3, 
+                     docfreq_type = "prop")
+
+```
+
+```{r}
+train_matrix = as.matrix(train_dfm_body)
+print(class(train_matrix))
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_model = naiveBayes(x = train_matrix, 
+                      y = dependent_variable, 
+                      laplace = 1)
+```
+
+```{r}
+nb_prediction = predict(nb_model, train_matrix)
+```
+
+```{r}
+results = data.frame(
+  prediction = nb_prediction,
+  actual = dependent_variable
+)
+
+results
+```
+
+```{r}
+library(magrittr) # for the pipe operator
+
+# Create an expanded list of stopwords
+expanded_stopwords = c(
+  stopwords(language = 'en', source = 'snowball'),
+  stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords(language = 'en', source = 'smart'),
+  stopwords(language = 'en', source = 'marimo'),
+  stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+) %>% unique() # Remove duplicates
+
+# Preprocess the text
+tokens_processed = tokens(train_corpus) %>%
+  tokens_tolower() %>%
+  tokens_remove(expanded_stopwords) %>%
+  tokens_remove("[[:punct:]]") %>%
+  tokens_wordstem()
+
+# Create a (DFM) 
+dfm_train = dfm(tokens_processed)
+
+# Trim the DFM
+trimmed_dfm = dfm_trim(dfm_train, min_termfreq = 100) # Adjust this threshold as necessary
+
+# View dimensions of the trimmed DFM
+dim(trimmed_dfm)
+
+```
+
+```{r}
+train_matrix = as.matrix(trimmed_dfm)
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_model = naiveBayes(x = train_matrix, y = dependent_variable, laplace = 1)
+
+# Make predictions using the trained model
+nb_prediction = predict(nb_model, train_matrix)
+```
+
+
+```{r}
+results = data.frame(
+  prediction = nb_prediction,
+  actual = dependent_variable
+)
+
+results
+```
+
+```{r}
+table(dependent_variable)
+```
+
+
+
+## Assignment 12:
+
+1:Question - Describe how each of the following metrics can be used to assess a Naive Bayes or other types of classifiers:
+Accuracy: Accuracy measures the overall effectiveness of a classifier by determining the proportion of total predictions that are correct. It is calculated as the number of correct predictions (both true positives and true negatives) divided by the total number of cases tested. For classifiers like Naive Bayes, accuracy provides a quick overview of performance across all categories but does not distinguish between types of errors (Alex, 2019).
+Precision: Precision, also known as positive predictive value, assesses the correctness of the positive predictions made by a classifier. It is defined as the ratio of true positive predictions to the total predicted positives (true positives plus false positives). This metric is crucial when the cost of a false positive is high. For example, in spam detection, a high precision means fewer legitimate emails are incorrectly marked as spam (Alex, 2019).
+Recall: Recall, or sensitivity, measures the classifier’s ability to identify all relevant instances. It is calculated as the ratio of true positive predictions to the actual positives (true positives plus false negatives). Recall is particularly important in scenarios where missing a positive instance is more detrimental than falsely identifying a negative instance as positive, such as in medical diagnosis for serious conditions (Alex, 2019).
+Reference
+
+Alex (2019). Classification Accuracy in R: Difference Between Accuracy, Precision, Recall, Sensitivity and Specificity. Retrieved from .
+
+2 Question:Give an example for each of the three metrics above where you believe one would be better suited than the other three.
+Accuracy
+Example: General News Categorization
+Scenario: When classifying news articles into general categories like sports, politics, entertainment, etc., it is important that most articles are correctly categorized to maintain a user-friendly experience.
+Justification: Accuracy is the best metric here because the consequence of misclassification (e.g., mislabeling a sports article as entertainment) is generally low in severity. The goal is to get the majority of the classifications correct across all categories, which is exactly what accuracy measures.
+
+Precision
+Example: Email Spam Detection
+Scenario: In email spam filters, it's crucial that legitimate emails are not mistakenly classified as spam, which could result in important messages being missed by the user.
+Justification: Precision is the most critical metric here because a high precision means that when an email is classified as spam, it is very likely to be truly spam. This metric ensures that non-spam (legitimate) emails are not lost, prioritizing the correctness of positive (spam) predictions over the complete identification of all actual spam emails.
+
+Recall
+Example: Disease Screening Tests
+Scenario: In medical screening tests, such as those for cancer or other serious diseases, it is vital to identify all individuals who might have the disease.
+Justification: Recall is the optimal metric for this scenario because the cost of missing a disease case (false negative) is very high (i.e., a patient might not receive necessary treatment). A high recall ensures that nearly all disease cases are identified, even if this results in some false positives (healthy individuals incorrectly identified as having the disease), which can usually be clarified with further testing.
+```{r}
+# Create the confusion matrix
+conf_mat = table(results$prediction, results$actual)
+print(conf_mat)
+
+```
+
+```{r}
+# Calculate accuracy
+accuracy = sum(diag(conf_mat)) / sum(conf_mat)
+print(paste("Accuracy:", accuracy))
+```
+
+```{r}
+print(conf_mat)
+print(rownames(conf_mat))
+print(colnames(conf_mat))
+```
+
+```{r}
+# Eliminate any empty string
+actual_levels = unique(c(as.character(results$prediction), as.character(results$actual)))
+actual_levels = actual_levels[actual_levels != ""]  # Exclude any empty string
+
+results$prediction = factor(results$prediction, levels = actual_levels)
+results$actual = factor(results$actual, levels = actual_levels)
+
+conf_mat <- table(results$prediction, results$actual)
+
+
+# Calculate precision for each class
+precision = sapply(levels(results$prediction), function(x) {
+  # Ensure that x is a valid index
+  tp = if (x %in% rownames(conf_mat) && x %in% colnames(conf_mat)) conf_mat[x, x] else 0
+  fp = if (x %in% rownames(conf_mat)) sum(conf_mat[x,]) - tp else 0
+  if (tp + fp == 0) return(0)  # To handle division by zero if there are no positive predictions
+  tp / (tp + fp)
+})
+
+print("Precision for each class:")
+print(precision)
+
+
+```
+
+```{r}
+# Calculate recall for each class
+recall = sapply(rownames(conf_mat), function(x) {
+  tp = conf_mat[x, x]
+  fn = sum(conf_mat[,x]) - tp
+  if (tp + fn == 0) return(0) # To handle division by zero if there are no actual positives
+  tp / (tp + fn)
+})
+
+print("Recall for each class:")
+print(recall)
+
+```
+The results reveal significant insights, underscored by the model's performance metrics: accuracy, precision, and recall. The model's overall accuracy is exceedingly low, approximately 1.94213238208482%, indicating that a minimal fraction of its predictions are correct. This low accuracy suggests the model struggles significantly across all classes, not effectively distinguishing between them.
+
+Precision, which measures how many of the model's optimistic predictions are correct, varies significantly across classes. For "Personal Negative," the precision is the highest at approximately 34.82%, suggesting a higher likelihood of accurate predictions for this class than others. "Personal Positive" follows with a precision of about 40%, indicating moderate forecast reliability. However, "Policy Positive" exhibits a much lower precision of 11.11%, and both "Neutral" and "Policy Negative" have a precision of 0%, indicating that all predictions for these classes were incorrect. These precision metrics highlight the model's predictive ability weaknesses, particularly in correctly identifying less frequent classes.
+
+Recall, which assesses the model's capability to identify all actual class instances, also shows varied results. "Personal Negative" has the highest recall at approximately 86.67%, indicating that the model can identify most cases for this class. "Policy Positive" has a recall of 60%, showing a moderate capability, while "Personal Positive" has a low recall of about 33.33%. Both "Neutral" and "Policy Negative" exhibit a recall of 0%, which might suggest either an absence of true positives for these classes in the dataset or a complete failure of the model to identify any such cases.
+
+The synthesis of these findings points to a model particularly challenged by imbalanced class distribution or insufficient feature differentiation among classes. The high recall for "Personal Negative" suggests a model bias towards this frequently occurring class, potentially at the expense of other courses, as evidenced by the near-zero precision and recall for "Neutral" and "Policy Negative." A review of data preprocessing, feature engineering, and exploring more robust models or tuning existing models is essential to improve the model's performance. Enhancing data balance and feature informativeness could help achieve more equitable and accurate class predictions.
+
+
+```{r}
+# Create a Common function to prepare text data
+prepare_text_data = function(data, stopwords_list, lower = FALSE, stem = FALSE, min_tf = 0.4, max_df = 0.3) {
+  # Basic cleaning
+  data$text = as.character(data$comment_body)
+  
+  corpus = corpus(data$text)
+
+  tokens = tokens(corpus, what = "word", remove_punct = TRUE, remove_numbers = TRUE, remove_symbols = TRUE)
+  
+  if (lower) {
+    tokens = tokens_tolower(tokens)
+  }
+  
+  if (stem) {
+    tokens = tokens_wordstem(tokens)
+  }
+  
+  # Remove stopwords
+  tokens = tokens_remove(tokens, pattern = stopwords_list)
+  
+  # Create a document-feature matrix
+  dfm = dfm(tokens) %>% dfm_trim(min_termfreq = min_tf, max_docfreq = max_df, docfreq_type = "prop")
+  
+  return(dfm)
+}
+
+```
+
+```{r}
+# Define different configurations for stopwords
+standard_stopwords = stopwords("en")
+expanded_stopwords = unique(c(standard_stopwords, stopwords
+                              ("en", source = "stopwords-iso"), 
+                              'gt', 'us', 'get', 't', 'e', 'r', 'like', 'just'))
+
+# Experiment 1: Standard vs. Expanded Stopwords
+dfm_standard = prepare_text_data(train_data, 
+                                 standard_stopwords, lower = TRUE, stem = TRUE)
+dfm_expanded = prepare_text_data(train_data, 
+                                 expanded_stopwords, lower = TRUE, stem = TRUE)
+
+# Experiment 2: Without vs. With Text Normalization
+dfm_no_norm = prepare_text_data(train_data, 
+                                expanded_stopwords, lower = FALSE, stem = FALSE)
+dfm_with_norm = prepare_text_data(train_data, 
+                                  expanded_stopwords, lower = TRUE, stem = TRUE)
+
+# Experiment 3: Liberal vs. Conservative Term Frequencies
+dfm_liberal = prepare_text_data(train_data, 
+                                expanded_stopwords, lower = TRUE, stem = TRUE, min_tf = 0.2, max_df = 0.5)
+dfm_conservative = prepare_text_data(train_data, 
+                                     expanded_stopwords, lower = TRUE, stem = TRUE, min_tf = 0.5, max_df = 0.1)
+
+# Function to train and evaluate model
+evaluate_model = function(dfm, actual_labels) {
+  train_matrix = convert(dfm, to = "matrix")
+  model = naiveBayes(train_matrix, as.factor(actual_labels))
+  predictions = predict(model, train_matrix)
+  
+  # Evaluation metrics
+  conf_mat = table(Prediction = predictions, Actual = actual_labels)
+  accuracy = sum(diag(conf_mat)) / sum(conf_mat)
+  precision = diag(conf_mat) / rowSums(conf_mat)
+  recall = diag(conf_mat) / colSums(conf_mat)
+  
+  list(Accuracy = accuracy, Precision = precision, Recall = recall)
+}
+
+# Run evaluations
+results_standard = evaluate_model(dfm_standard, train_data$sentiment_comment)
+results_expanded = evaluate_model(dfm_expanded, train_data$sentiment_comment)
+results_no_norm = evaluate_model(dfm_no_norm, train_data$sentiment_comment)
+results_with_norm = evaluate_model(dfm_with_norm, train_data$sentiment_comment)
+results_liberal = evaluate_model(dfm_liberal, train_data$sentiment_comment)
+results_conservative = evaluate_model(dfm_conservative, train_data$sentiment_comment)
+
+```
+
+```{r}
+# Create a function to print all results
+print_results = function(results, experiment_name) {
+  cat("\nResults for", experiment_name, ":\n")
+  cat("Accuracy:", results$Accuracy, "\n")
+  cat("Precision:", paste(results$Precision, collapse=", "), "\n")
+  cat("Recall:", paste(results$Recall, collapse=", "), "\n")
+}
+
+print_results(results_standard, "Standard Stopwords")
+print_results(results_expanded, "Expanded Stopwords")
+print_results(results_no_norm, "No Text Normalization")
+print_results(results_with_norm, "With Text Normalization")
+print_results(results_liberal, "Liberal Term Frequencies")
+print_results(results_conservative, "Conservative Term Frequencies")
+```
+Question 4) Vary input data in at least three ways  (Eg: Drop/don't drop stop words, keep only common words, label more data) and compute accuracy, precision and recall each time. What worked the best? Why do you think it worked better?
+The comparison of the older results to the newer ones indicates a significant shift in model performance across different data preparation methods, albeit with an overall decline in effectiveness. Initially, the model exhibited an accuracy of about 1.94%, which, while low, was notably higher than the accuracies observed in the more recent results, where accuracy hovered around 0.4% across various configurations such as standard and expanded stopwords, text normalization, and adjustments in term frequencies.
+
+In the older results, precision and recall showed some variability across classes. For example, 'Personal Negative' had a precision of approximately 34.82% and a recall of 86.67%, indicating a moderately effective identification of this class despite a high false positive rate. 'Policy Positive' had a precision of about 11.11% but a higher recall at 60%, suggesting the model was relatively better at identifying positive instances of this class but still quite prone to false positives.
+
+In stark contrast, the newer results demonstrate an almost complete breakdown in precision and recall across all tested setups. Precision values were predominantly NaN (Not a Number), indicating no predictions were made for most classes or all projections were incorrect. Where precision did register, it tended to be exceedingly low, except for isolated cases where precision reached 1, likely due to significantly few correct predictions against a backdrop of overall few projections, leading to a misleadingly perfect precision score for that class. Recall figures also plummeted, with most classes having a recall of 0, indicating a failure to identify true positives correctly.
+
+The consistency of low performance in the newer results, regardless of the method used, suggests a deeper issue with the model or data quality that goes beyond simple adjustments in data preparation techniques. The sharp decline from already modest performance levels in the older setup to negligible levels in the newer configurations may point to issues such as overfitting, poor feature selection, or changes in how data was processed or labeled.
+
+These results require further investigation into the model's structure and training process. Additionally, revisiting the fundamentals of data preprocessing, exploring more robust feature engineering strategies, and considering alternative modeling approaches could improve the model's performance and reliability.
+```{r}
+# Code used to Create the confusion matrix
+#conf_mat = table(results$prediction, results$actual)
+#print(conf_mat)
+```
+
+Question 5:
+
+In my recent analysis, I developed a Naive Bayes classifier to discern sentiment categories from Reddit discussions about the Paris Agreement, employing categories such as "Neutral," "Personal Negative," "Personal Positive," "Policy Negative," and "Policy Positive." The performance of this classifier was evaluated using a confusion matrix, which revealed the model's accuracy across these classes. The diagonal of the matrix indicated very low numbers of correct predictions, such as only 31 correct identifications for "Personal Negative" from thousands of instances, pointing to a high misclassification rate. Furthermore, the off-diagonal entries exposed significant misclassifications, such as many comments that were actually "Neutral" incorrectly labeled as "Personal Negative," suggesting a model bias towards this category.
+
+These results indicate that the model could perform better with an overall accuracy of just under 2%. Precision and recall metrics varied greatly, with "Personal Negative" showing relatively better recall at approximately 87%, yet struggling in other categories, especially "Neutral" and "Policy Negative," where both metrics fell to zero. This poor performance highlights the need for substantial improvements in the model's capacity to accurately differentiate between sentiment categories, potentially through enhanced feature engineering, better handling of data imbalances, and more sophisticated text preprocessing methods. Moving forward, refining the training process, exploring advanced feature extraction techniques, and adopting different algorithms might improve the classifier's effectiveness, thereby providing more reliable insights into public sentiment on critical issues like climate policy.
+
+```{r}
+
+```
+
+
+
+# Assignment 13
+```{r}
+library(neuralnet)
+# Convert the sentiment_comment column to a factor
+train_data$dependent_variable = factor(train_data$sentiment_comment)
+
+# Convert train_matrix to a data frame for neuralnet compatibility
+train_data_df = as.data.frame(train_matrix)
+
+# Ensure unique column names
+col_names = make.names(names(train_data_df), unique = TRUE)
+train_data_df = setNames(train_data_df, col_names)
+
+# Add the target variable 
+train_data_df$dependent_variable = train_data$dependent_variable
+
+# Ensure all input features are numeric to avoid error
+train_data_df[, -ncol(train_data_df)] = sapply(train_data_df[, -ncol(train_data_df)], as.numeric)
+
+# Fit a neural network
+nn_model = neuralnet(dependent_variable ~ ., data = train_data_df, hidden = c(5, 3), 
+                      linear.output = FALSE, threshold = 0.01)
+
+# Print model
+print(nn_model)
+
+
+```
+
+```{r}
+# Check levels are correct and consistent
+results$prediction = factor(results$prediction, levels = levels(results$actual))
+
+# Create confusion matrix
+confusion = confusionMatrix(data = results$prediction, reference = results$actual)
+
+# Extract and print accuracy
+accuracy = confusion$overall['Accuracy']
+print(paste("Accuracy: ", accuracy))
+
+# Check for NA 
+precision = confusion$byClass['Precision']
+if (any(is.na(precision))) {
+  print("Precision contains NA values, indicating that one or more classes have no predicted positives (zero TP + zero FP).")
+} else {
+  print(paste("Precision: ", precision))
+}
+
+recall = confusion$byClass['Recall']
+if (any(is.na(recall))) {
+  print("Recall contains NA values, indicating that one or more classes have no true positives (zero TP).")
+} else {
+  print(paste("Recall: ", recall))
+}
+
+print("Detailed Confusion Matrix:")
+print(confusion$table)
+
+
+```
