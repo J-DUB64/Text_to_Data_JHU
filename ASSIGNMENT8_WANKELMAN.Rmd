@@ -1,0 +1,619 @@
+---
+title: "ASSIGNMENT8_WANKELMAN"
+output: pdf_document
+date: "2024-03-15"
+---
+Shifting the focus of my research from carbon pricing policies to the Paris Agreement represents a strategic pivot towards analyzing a broader and more global aspect of climate change discourse. The Paris Agreement, a landmark in international efforts to combat climate change, provides a unique lens through which public sentiment and understanding can be gauged. Unlike carbon pricing, which can often be mired in local or regional policy specifics, the Paris Agreement offers a global platform that elicits reactions from a broad spectrum of individuals, enriching the diversity and depth of public discourse captured for analysis. This switch allows for a more comprehensive understanding of global perspectives on climate action, transcending the boundaries of specific carbon management strategies to include broader commitments to reducing carbon emissions and enhancing sustainability efforts worldwide.
+
+Moreover, the Paris Agreement's prominence in media and public discussions ensures a rich dataset of opinions, debates, and sentiments that can be leveraged to understand public perception at a larger scale. This global framework inherently involves many stakeholders, including nations, corporations, and individuals, thus offering a multifaceted view of the climate change conversation. By focusing on the Paris Agreement, my research taps into a broader narrative of climate action, encompassing not only the technical and policy-oriented aspects of carbon management but also the social, economic, and ethical considerations that shape global climate governance. This holistic approach enhances the academic rigor of my project. It increases its relevance to policymakers, activists, the international community, and all stakeholders in successfully implementing the Paris Agreement.
+
+Research Question: How does public discourse on Reddit regarding the Paris Agreement reflect broader societal attitudes towards international climate action, and what can this tell us about the global community's readiness to engage with and support the commitments outlined in the agreement?
+
+```{r}
+# Load Libraries
+library(quanteda)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(readtext)
+library(tm)
+library(jsonview)
+library(quanteda)
+library(stopwords)
+library(stringr)
+library(ldatuning)
+library(plotly)
+library(tidyr)
+library(LDAvis)
+library(tsne)
+library(Rtsne)
+library(lda)
+```
+
+```{r}
+reddit_url = "https://www.reddit.com/api/v1/access_token"
+key = "WsclNrNPGYnm0lAcIk2Xaw"  
+secret = "ZTJzC_NHDUqjaEpABwdJRDY90FwwsQ"
+username = "PsychologyObvious81" 
+password = "Dominate2024{}!*"
+
+
+response = request("https://www.reddit.com/api/v1/access_token") |>
+  req_auth_basic(key, secret) |>
+  req_body_form(grant_type = "password", username = username, password = password) |>
+  req_perform()
+
+
+if (response$status_code == 200) {
+  content_list = resp_body_json(response)
+  token = content_list$access_token
+} else {
+  print(paste("Error with request, status code:", response$status_code))
+}
+
+#Reddit. Reddit API documentation. Retrieved from https://www.reddit.com/dev/api
+```
+
+
+```{r}
+results_df = data.frame(
+  subreddit = character(),
+  post_id = character(),
+  post_title = character(),
+  post_body = character(),
+  post_date = character(), # Column for post date
+  comment_id = character(),
+  comment_body = character(),
+  comment_date = character(), # New column for comment date
+  stringsAsFactors = FALSE
+)
+
+# Define subreddits and search query focused on "The Paris Agreement" and related topics
+subreddits = c("ClimateChange", "environment", "sustainability", "politics", "climate", "science")
+search_queries = c('"The Paris Agreement"', '"Climate Accord"')
+
+for (subreddit in subreddits) {
+  for (search_query in search_queries) {
+    Sys.sleep(15) # Respect Reddit's rate limiting
+    
+    # Formulate the request URL with enhanced search parameters
+    url = sprintf("https://www.reddit.com/r/%s/search.json?q=%s&restrict_sr=1&sort=new&limit=100",
+                  subreddit, URLencode(search_query))
+    
+    response = httr::GET(url, httr::add_headers(Authorization = sprintf("Bearer %s", token),
+                                                `User-Agent` = sprintf("R:reddit.api.pull:v1.0 (by /u/%s)", username)))
+  
+    if (response$status_code == 200) {
+      content = jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE)
+      if (!is.null(content$data) && !is.null(content$data$children)) {
+        posts = content$data$children
+        for (post in posts) {
+          Sys.sleep(10)  # Delay for comments request
+          comments_url = paste0("https://www.reddit.com", post$data$permalink, ".json?limit=200")
+          comments_response = httr::GET(comments_url, httr::add_headers(Authorization = paste("Bearer", token), `User-Agent` = paste("R:reddit.api.pull:v1.0 (by /u/", username, ")")))
+          
+          if (comments_response$status_code == 200) {
+            comments_content = jsonlite::fromJSON(rawToChar(comments_response$content), simplifyVector = FALSE)
+            if (length(comments_content) >= 2 && !is.null(comments_content[[2]]$data) && !is.null(comments_content[[2]]$data$children)) {
+              comments = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$body)) x$data$body else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_ids = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$id)) x$data$id else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_dates = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$created_utc)) as.POSIXct(x$data$created_utc, origin="1970-01-01", tz="GMT") else NA, simplify = FALSE, USE.NAMES = FALSE)
+              
+              # Convert Unix timestamp to readable date for posts
+              post_date = as.POSIXct(post$data$created_utc, origin="1970-01-01", tz="GMT")
+              
+              if (length(comments) > 0) {  # Ensure there are comments before proceeding
+                for (i in seq_along(comments)) {
+                  temp_df = data.frame(
+                    subreddit = subreddit,
+                    post_id = post$data$id,
+                    post_title = post$data$title,
+                    post_body = post$data$selftext,
+                    post_date = post_date, # Add post date to the data frame
+                    comment_id = comment_ids[[i]],
+                    comment_body = comments[[i]],
+                    comment_date = comment_dates[[i]], # Add comment date to the data frame
+                    stringsAsFactors = FALSE
+                  )
+                  results_df = rbind(results_df, temp_df)
+                }
+              } else {  # No comments, but include post data anyway with NA for comment fields
+                temp_df = data.frame(
+                  subreddit = subreddit,
+                  post_id = post$data$id,
+                  post_title = post$data$title,
+                  post_body = post$data$selftext,
+                  post_date = post_date, # Add post date even for posts without comments
+                  comment_id = NA,
+                  comment_body = NA,
+                  comment_date = NA, # No comment date available
+                  stringsAsFactors = FALSE
+                )
+                results_df = rbind(results_df, temp_df)
+              }
+            }
+          }
+        }
+      } else {
+        print(paste("No data found for subreddit:", subreddit))
+      }
+    } else {
+      message("Request failed with status code: ", response$status_code, " for subreddit: /r/", subreddit)
+    }
+  }
+}
+
+# Write results to CSV with more descriptive filename and include date
+write.csv(results_df, sprintf("reddit_discussions_%s.csv", Sys.Date()), row.names = FALSE)
+
+
+#Citation to figure out how to successfully do a Reddit API pullrequest
+#Broman, K. (n.d.). APIs for social scientists. Bookdown. Retrieved from https://bookdown.org/paul/apis_for_social_scientists/reddit-api.html#prerequisites-15
+
+#Korkmaz, S. (2016, July 4). Accessing Web Data (JSON) in R using httr. DataScience+. Retrieved from https://datascienceplus.com/accessing-web-data-json-in-r-using-httr/
+
+#Wickham, H. Quickstart. httr. Retrieved from https://httr.r-lib.org/articles/quickstart.html
+
+#Reddit. OAuth2. GitHub. Retrieved from https://github.com/reddit-archive/reddit/wiki/OAuth2
+
+#rymur. Overview. Retrieved from https://rymur.github.io/overview
+
+#Reddit. Reddit Developer Services. Reddit Help. Retrieved from https://support.reddithelp.com/hc/en-us/articles/14945211791892-Reddit-Developer-Services
+
+#OpenAI. OpenAI. 03/10/2024 Retrieved from https://www.openai.com
+
+#AlpsCode. (2021, January 11). How to use Reddit API. AlpsCode. Retrieved from https://alpscode.com/blog/how-to-use-reddit-api/
+
+#rymur. Setup. Retrieved from https://rymur.github.io/setup 
+
+#Learn R. Reading CSV files. Retrieved from https://learn-r.org/r-tutorial/read-csv.php
+
+#R Documentation. write.table. Retrieved from https://www.rdocumentation.org/packages/utils/versions/3.6.2/topics/write.table
+
+```
+
+
+```{r}
+#Load CSV
+carbon_credit_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 8/reddit_discussions_paris_agreement.csv",
+                                stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(carbon_credit_reddit)
+```
+
+```{r}
+head(carbon_credit_reddit, n = 5)
+```
+
+```{r}
+#Check for NA
+anyNA(carbon_credit_reddit$comment_body)
+```
+
+```{r}
+#Check how many NA's
+sum(is.na(carbon_credit_reddit$comment_body))
+
+```
+
+```{r}
+#Check how many NA's
+which(is.na(carbon_credit_reddit$comment_body))
+
+
+```
+
+```{r}
+# Prepare the data in the reddit csv file
+carbon_credit_reddit$text = paste(carbon_credit_reddit$comment_body)
+
+```
+
+
+```{r}
+# Clean and prepare the text
+clean_body_text = carbon_credit_reddit %>%
+  mutate(text = str_remove_all(text, "\\n")) %>% #remove all newline characters
+  mutate(text = str_remove_all(text, "\\r")) %>% #removes all occurrences of \r from the text column
+  mutate(text = str_remove_all(text, "\\t")) #remove all tab characters 
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+# Create a corpus
+corpus_body = corpus(clean_body_text$text)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_body_trim = tokens(corpus_body, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+tokens_remove(pattern=stopwords('en'))
+dfm_body = dfm(tokens_body_trim) %>%
+dfm_trim(min_termfreq = 0.4, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.3,
+         docfreq_type = "prop")
+
+
+top_terms_body = dfm_body
+top_terms_body
+```
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+
+expanded_stopwords = c(
+  stopwords(language = 'en', source = 'snowball'),
+  stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords(language = 'en', source = 'smart'),
+  stopwords(language = 'en', source = 'marimo'),
+  stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+  ) %>%
+  unique()
+```
+
+
+```{r}
+# Rerun the tokenize the corpus with extended stopwords
+tokens_body = tokens(corpus_body, remove_punct = TRUE, 
+          remove_url = TRUE, 
+          remove_numbers = TRUE,
+          remove_symbols = TRUE) %>%
+tokens_remove(pattern = expanded_stopwords)
+dfm_body = dfm(tokens_body) %>%
+dfm_trim(min_termfreq = 0.5, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.4, 
+         docfreq_type = "prop")
+
+top_terms = topfeatures(dfm_body, 20)
+print(top_terms)
+```
+
+```{r}
+library(viridis)
+
+# Convert the top_terms to a data frame for plotting
+top_terms_df = data.frame(term = names(top_terms), frequency = top_terms)
+
+# Order the terms by frequency for better visualization
+top_terms_df = top_terms_df[order(-top_terms_df$frequency), ]
+
+# Create the bar plot
+ggplot(top_terms_df, aes(x = reorder(term, frequency), y = frequency)) +
+  geom_bar(stat = "identity") +
+  scale_color_viridis(discrete = TRUE, option = "D") +
+  theme_minimal() +
+  labs(title = "Top 20 Terms Frequency", x = "Term", y = "Frequency") +
+  coord_flip() + # Flip coordinates for a horizontal bar plot
+  theme(plot.title = element_text(hjust = 0.5)) # Center the plot title
+
+
+```
+
+```{r}
+find("terms")
+
+```
+
+
+```{r}
+library(topicmodels)
+# dfm_body is properly formatted for use with topicmodels
+dtm_body = convert(dfm_body, to = 'topicmodels')
+
+
+# Explicitly use the LDA function from the topicmodels package
+lda_body_model = topicmodels::LDA(dtm_body, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_body_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_body_terms = terms(lda_body_model, 10) 
+print(lda_body_terms)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_body_tune = FindTopicsNumber(
+  dtm_body,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_body_tune$results, is.finite))){
+  plot(lda_body_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 15
+lda_optimal_model = LDA(dtm_body, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_terms = topicmodels::terms(lda_optimal_model, 15) 
+print(lda_optimal_terms)
+
+```
+
+#LDAvis
+```{r}
+library(LDAvis)
+library(servr)
+
+# Extract the posterior distributions for topics and terms
+lda_posterior = posterior(lda_optimal_model)
+
+# Convert to matrices
+phi = as.matrix(lda_posterior$terms)
+theta = as.matrix(lda_posterior$topics)
+
+# Preparations for JSON
+vocab = colnames(phi)
+doc.length = slam::row_sums(dtm_body)
+term.freq = slam::col_sums(dtm_body)[match(vocab, colnames(dtm_body))]
+
+dist.mat <- as.matrix(dist(theta)) # Using theta for illustration; adjust according to your needs
+
+# Check and handle NA or Inf values in dist.mat
+if(any(is.na(dist.mat)) | any(is.infinite(dist.mat))) {
+  dist.mat[is.na(dist.mat) | is.infinite(dist.mat)] <- 0 # Adjust this handling as appropriate
+}
+
+# Assuming `createJSON` function is correctly defined to format for LDAvis
+json = createJSON(
+  phi = phi,
+  theta = theta,
+  vocab = vocab,
+  doc.length = doc.length,
+  term.frequency = term.freq
+)
+
+
+```
+
+```{r}
+# Use serVis on the JSON file
+serVis(json_file_path, 
+       out.dir = 'LDAvis_output', 
+       open.browser = TRUE)
+```
+
+
+```{r}
+# Also used for SVMs later in the class
+
+library(e1071)
+```
+
+```{r}
+# Let's actually train our NB model (Very exciting!)
+# As always, check the documentation
+?naiveBayes
+```
+
+```{r}
+#Load CSV
+train_data = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 8/reddit_discussions_paris_agreement.csv",
+                              stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(train_data)
+```
+
+```{r}
+
+dependent_variable = as.factor(train_data$"sentiment_comment")
+
+```
+
+```{r}
+#need a DFM, the basis for creating all models
+train_corpus = corpus(train_data, text_field = "comment_body")
+```
+
+```{r}
+# DFM creation and trimming
+tokens_body_trim = tokens(train_corpus, 
+                           remove_punct = TRUE, 
+                           remove_url = TRUE, 
+                           remove_numbers = TRUE,
+                           remove_symbols = TRUE) %>%
+                    tokens_remove(pattern=stopwords('en'))
+
+train_dfm_body = dfm(tokens_body_trim) %>%
+            dfm_trim(min_termfreq = 0.4, 
+                     termfreq_type = 'quantile', 
+                     max_docfreq = 0.3, 
+                     docfreq_type = "prop")
+
+```
+
+```{r}
+train_matrix = as.matrix(train_dfm_body)
+print(class(train_matrix))
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_model = naiveBayes(x = train_matrix, 
+                      y = dependent_variable, 
+                      laplace = 1)
+```
+
+```{r}
+nb_prediction = predict(nb_model, train_matrix)
+```
+
+```{r}
+results = data.frame(
+  prediction = nb_prediction,
+  actual = dependent_variable
+)
+
+results
+```
+
+```{r}
+library(magrittr) # for the pipe operator
+
+# Assuming train_corpus is already defined and is a corpus object
+
+# Create an expanded list of stopwords from various sources
+expanded_stopwords <- c(
+  stopwords(language = 'en', source = 'snowball'),
+  stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords(language = 'en', source = 'smart'),
+  stopwords(language = 'en', source = 'marimo'),
+  stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+) %>% unique() # Remove duplicates
+
+# Preprocess the text: tokenize, convert to lowercase, remove expanded stopwords, punctuations, and then stem
+tokens_processed <- tokens(train_corpus) %>%
+  tokens_tolower() %>%
+  tokens_remove(expanded_stopwords) %>%
+  tokens_remove("[[:punct:]]") %>%
+  tokens_wordstem()
+
+# Create a Document-Feature Matrix (DFM) from the processed tokens
+dfm_train <- dfm(tokens_processed)
+
+# Trim the DFM to remove infrequent terms
+trimmed_dfm <- dfm_trim(dfm_train, min_termfreq = 100) # Adjust this threshold as necessary
+
+# View dimensions of the trimmed DFM
+dim(trimmed_dfm)
+
+```
+
+```{r}
+train_matrix = as.matrix(trimmed_dfm)
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_model = naiveBayes(x = train_matrix, y = dependent_variable, laplace = 1)
+
+# Make predictions using the trained model
+nb_prediction = predict(nb_model, train_matrix)
+```
+
+
+```{r}
+results = data.frame(
+  prediction = nb_prediction,
+  actual = dependent_variable
+)
+
+results
+```
+
+```{r}
+table(dependent_variable)
+```
+
+#### Module 8 Assignment
+In my analysis of the Naive Bayes classifier applied to sentiment analysis from Reddit comments on the Paris Agreement, I focused on understanding which terms significantly influenced the model's predictions. To train the model, I utilized a Document-Feature Matrix optimized by eliminating irrelevant elements and prioritizing terms with significant frequency. This approach revealed specific terms that stood out for their predictive value, helping to classify sentiments accurately. Meanwhile, other terms showed minimal or no influence on the sentiment outcome, indicating their lower relevance in the context of the discussion. Through this analysis, I gained insights into the nuanced role of specific words in shaping sentiment analysis models and the broader implications for text-based data interpretation.
+
+The model was trained on a Document-Feature Matrix (DFM) that was preprocessed to remove punctuation, URLs, numbers, symbols, and stopwords. The DFM was then trimmed based on term frequency and document frequency criteria to focus on more predictive terms. From the provided output, we need direct visibility into the specific terms or tokens that were strongly predictive because the Naive Bayes model's results were shown without directly detailing the term weights or importance. However, some insights can be drawn from the prediction results and model setup.
+
+
+#### Results from the First Predictive Analysis: Strongly Predictive Terms/Tokens
+Tokens contributing to Policy Positive predictions: Despite varied sentiments, many comments were predicted as Policy Positive. This indicates that terms related to policy discussions or positive sentiments about policies might have been overrepresented or weighted heavily in the model. However, with the specific term weights or a deeper analysis of the feature importance provided by the model, it's easier to pinpoint exactly which terms were responsible.
+
+Inclusion and Exclusion Criteria: The tokens chosen for the model, after removing punctuations, URLs, numbers, and symbols and applying a custom list of stopwords, followed by trimming based on term frequency and document frequency, could hint at which types of terms were more likely to be predictive. Terms that were not too common (to avoid generic terms) and not too rare (to ensure enough instances for learning) were selected, suggesting that moderately frequent terms specific to the context of the Paris Agreement discussions might have been predictive.
+
+#### Terms/Tokens That Were Not Strongly Predictive
+Neutral Terms: Based on the misclassifications, neutral terms or phrases that are not strongly indicative of a specific sentiment may not have been effective in predicting sentiment, significantly when they were predicted as Policy Positive. This suggests that it may be necessary to consider other factors or more specific language to predict sentiment in certain contexts better. This could be due to the model's bias towards more distinctive terms in the training data. Rare Terms: Given the trimming process that removed infrequent terms, it's likely that rare terms specific to individual comments but not commonly used across the dataset were not strongly predictive. These terms might have been excluded from the model training due to the trimming criteria.
+
+#### Results from the Second Predictive Analysis: Strongly Predictive Terms/Tokens
+The second attempt to train the Naive Bayes classifier on Reddit discussion comments regarding the Paris Agreement reveals some clear patterns in predictive accuracy and misclassifications, which indirectly hint at the terms and tokens that were strongly predictive. Given the output of the predictive model, several observations can be made:
+
+Personal Negative Predictions: Many neutral comments or other sentiments were classified as "Personal Negative." This indicates that the model found specific terms or expressions commonly associated with personal negativity to be highly predictive. These could be words or phrases that express criticism, disappointment, or disagreement on an individual level rather than a policy level.
+
+Policy Positive Predictions: Another notable pattern is the model's prediction of comments as "Policy Positive," especially where the actual sentiment was "Policy Negative." This suggests that the model identified a set of terms strongly associated with positive discussions or support of policies, focusing on optimistic or supportive language that typically characterizes positive sentiment towards policy discussions.
+
+Predictive Strength of Sentiment Terms: The classification results suggest that terms explicitly related to sentiment (either positive or negative) were more strongly predictive than neutral or factual terms. This aligns with the expectation that sentiment analysis models find effective language a key determinant in classifying text according to sentiment.
+
+#### Terms/Tokens That Were Not Strongly Predictive
+Neutral Terms:
+The Naive Bayes classifier's difficulty in accurately predicting neutral sentiments, as evidenced by the misclassification of neutral comments as either "Personal Negative" or "Policy Positive," suggests that neutral terms were not strongly predictive. Neutral terms likely include factual statements, unbiased descriptions, or discussions that do not convey strong sentiments. The model's predisposition to classify comments into more definitive sentiment categories implies a challenge in effectively identifying and leveraging neutral terms.
+
+Rare Terms:
+Given the preprocessing steps that involved trimming the Document-Feature Matrix to exclude infrequent terms, it's reasonable to conclude that rare terms were also not strongly predictive. These terms, which may appear in only a few comments and do not have a high frequency across the dataset, were likely removed during the data preprocessing phase. This removal could lead to a loss of potentially valuable context-specific information but is a necessary step to focus the model on terms that provide a stronger signal for sentiment classification.
+
+
+#### Interpretation Challenges
+Interpreting the results from the Naive Bayes classifier across two distinct analyses presents a complex landscape, emphasizing the nuances of sentiment analysis in a corpus as diverse as Reddit discussions on the Paris Agreement. The initial analysis highlighted a significant leaning towards "Policy Positive" predictions, irrespective of the actual sentiments expressed in the comments. This pattern suggests an overrepresentation or a heavier weighting of terms related to policy discussions or positive feelings about policies within the model. The second analysis, meanwhile, demonstrated a shift toward "Personal Negative" predictions for a broad range of actual sentiments, including neutral ones. This shift indicates the model found specific terms associated with personal negativity highly predictive. These insights highlight the classifier's sensitivity to the particular features and preprocessing steps, such as removing punctuation, URLs, numbers, and symbols and applying custom stopword lists, followed by trimming based on term frequency and document frequency.
+
+The challenges in interpretation are further compounded by the misclassification of neutral terms and the exclusion of rare terms due to preprocessing decisions. The first analysis's bias toward "Policy Positive" predictions and the second's towards "Personal Negative" ones reveal a potential imbalance in the training data or model's inability to capture the subtlety of neutral sentiments. This imbalance underscores the difficulty of balancing the inclusion of informative terms against the necessity of managing dimensionality and model focus. Moreover, removing infrequent terms while streamlining the model may also strip away context-specific information that could enhance prediction accuracy. These challenges necessitate a closer examination of the model's assumptions, feature selection processes, and the inherent biases of the dataset. Addressing these issues could involve:
+
+Refining the preprocessing strategy.
+Exploring alternative modeling approaches.
+Incorporating additional contextual or linguistic features to improve the model's ability to discern and accurately classify the nuanced sentiments present in the data.
+
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
