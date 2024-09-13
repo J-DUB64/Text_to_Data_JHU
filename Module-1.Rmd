@@ -1,0 +1,238 @@
+---
+title: "Module 1"
+output: html_document
+date: "2024-01-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Since this is Week 1 we will install some of our basic packages
+#install.packages('quanteda')
+#install.packages('readtext')
+#install.packages('readtext')
+#install.packages('wordcloud')
+#install.packages('tidytext')
+#install.packages('magrittr') # For the cool %>% operator
+
+#This is a weird install, Quanteda needs to be installed first
+#install.packages("quanteda.textplots")
+#install.packages("quanteda.textstats") # Installing due to dfm.corpus() being deprecated - https://quanteda.io/news/news-3.0.html
+
+```
+
+
+```{r}
+library(quanteda)
+library(quanteda.textstats)
+library(readtext)
+
+# Tidyverse
+library(tidytext)
+library(magrittr)
+
+library(wordcloud)
+
+library(knitr)
+
+#library(quanteda.textplots) - This library when loaded with library(quanteda.textstats) was causing this conflict: Warning: undefined subclass "pcorMatrix" of class "replValueSp"; definition not updatedWarning: undefined subclass "pcorMatrix" of class "mMatrix"; definition not updatedWarning: undefined subclass "pcorMatrix" of class "xMatrix"; definition not updated
+
+ 
+```
+
+```{r}
+# Read in the CSV using readtext.
+nuclear_data = readtext (file = "~/Desktop/JHU/Semester 2/Text to Data/Module 1/sentiment_nuclear_power _1_.csv", text_field = "tweet_text")
+readtext_corpus = corpus(nuclear_data)
+
+
+# Read in CSV using basic read.csv
+# We will need to update a few fields and set options.
+# See for additional info: https://quanteda.io/reference/corpus.html
+nuclear_data_readcsv = read.csv("~/Desktop/JHU/Semester 2/Text to Data/Module 1/sentiment_nuclear_power _1_.csv",
+                            header = TRUE, # We have headers so set to TRUE
+                            stringsAsFactor = FALSE) # Make sure the text is retained as char
+
+
+# Quanteda requires some document name. In case of a CSV or similar format
+# We will assign integers as document IDs.
+nuclear_data_readcsv$doc_id = seq.int(nrow(nuclear_data_readcsv))
+
+# Create a corpus. Use 'text_field' to identify the right text column
+csv_corpus = corpus(nuclear_data_readcsv, text_field = 'tweet_text')
+
+```
+
+```{r}
+# Let's look at the summary of our corpus
+# Pick either CSV or readtext
+summary(csv_corpus)
+```
+
+
+```{r}
+# How many tokens (words) are in the corpus?
+# Change the corpus to tokens
+tokens_corpus = tokens(csv_corpus)
+
+# Determine number of tokens
+total_tokens = sum(ntoken(tokens_corpus))
+print(total_tokens)
+
+# OpenAI. "Response to Query on Counting Tokens." Received by Joseph Wankelman, 30 Jan. 2024. ChatGPT Session.
+
+```
+
+How many tokens (words) are in the corpus?
+4422
+
+```{r}
+summary(csv_corpus[5])
+```
+
+```{r}
+# Extract the fifth tweet from the corpus and convert it to tokens
+tokens_fifth_tweet = tokens(csv_corpus[5])
+
+# Directly count and print the number of tokens in the fifth tweet
+ntoken(tokens_fifth_tweet)
+
+#Quanteda. "Count the number of tokens or types." Accessed January 30, 2024. https://quanteda.io/reference/ntoken.html. 
+```
+
+How many tokens are in the fifth tweet? 
+32
+
+```{r}
+#Look at only negative sentiment tweets.
+# Use corpus_subset to select only tweets with negative sentiment.
+corpus_subset(csv_corpus, sentiment == 'Negative')
+```
+
+```{r}
+# We can add additional meadata to our corpus
+docvars(csv_corpus, 'course') = 'Text as Data'
+# If we provided a list to above docvars we would have document level metadata
+
+# Look at only subset of the summary with our new metadata/docvar
+summary(csv_corpus, 5)
+```
+
+```{r}
+# We will take an additional look at the DFM next week. This week we will use it 
+# to generate a word cloud.
+tokens = tokens(csv_corpus)
+
+dfm_nuclear = dfm(csv_corpus)
+```
+
+When working with Quanteda, a package that focuses on the quantitative analysis of textual data, deterministic processes such as tokenization and frequency analysis are commonly used. However, using seeds is also important in randomness functions. For example, when sampling texts or bootstrapping for statistical inference, setting a seed ensures that these random processes produce consistent and reproducible results (Benoit et al., 2018). This is particularly crucial when you need to replicate the exact sample in future analyses, ensuring consistency in research findings. 
+
+Similarly, in R programming, a seed is used to initialize the random number generator, an essential aspect of any statistical analysis involving randomness (R Core Team, 2021). By using the set.seed() function, researchers can ensure that the sequence of generated pseudo-random numbers is consistent across different script runs. This consistency is particularly important in scenarios like dataset splitting, random sampling, or simulations, where reproducibility is critical to the integrity and verification of scientific research (Chambers, 2008). Using seeds in both Quanteda and R programming underpins the principle of reproducibility, an essential cornerstone in scientific computing. It allows researchers and analysts to replicate analyses and share results with the assurance that others can obtain identical outcomes under the same conditions.
+
+References:
+Benoit, K., Watanabe, K., Wang, H., Nulty, P., Obeng, A., Müller, S., & Matsuo, A. (2018). Quanteda: An R package for the quantitative analysis of textual data. Journal of Open Source Software, https://joss.theoj.org/papers/10.21105/joss.00774
+
+```{r}
+# Removes punctuation and specific words
+dfm_nuclear_clean = dfm_remove(dfm_nuclear, pattern = "\\p{P}", valuetype = "regex")
+
+stopwords_custom = c("a", "to", "is", "it")  # Customize your list
+dfm_nuclear_clean = dfm_remove(dfm_nuclear_clean, pattern = stopwords_custom, valuetype = "fixed")
+
+dfm_nuclear_clean = dfm_remove(dfm_nuclear_clean, pattern = c("\\{", "\\}", "\\&"), valuetype = "regex")
+
+# Citations
+# OpenAI. "Guidance on Resolving DFM Removal Error in R Using Quanteda." Joseph Wankelman, 01/31/2024. 
+
+# Quanteda Development Team. "Select features from a dfm or fcm" Quanteda: An R Package for the Quantitative Analysis of Textual Data. Accessed 01/31/2024.https://quanteda.io/reference/dfm_select.html.
+```
+
+```{r}
+# generate the word cloud from the cleaned DFM
+set.seed(42)  # for reproducibility
+textplot_wordcloud(dfm_nuclear_clean, 
+                   min_count = 5,  # minimum frequency of words to include
+                   max_words = 500,  # maximum number of words to display
+                   color = RColorBrewer::brewer.pal(8, "Dark2"),  # using a color palette
+                   scale = c(10, 1))  # scaling of word sizes, making them larger
+
+```
+```{r}
+set.seed(40)  # for reproducibility
+textplot_wordcloud(dfm_nuclear_clean, 
+                   min_count = 5,  # minimum frequency of words to include
+                   max_words = 500,  # maximum number of words to display
+                   color = RColorBrewer::brewer.pal(8, "Dark2"),  # using a color palette
+                   scale = c(10, 1))  # scaling of word sizes, making them larger
+
+```
+
+```{r}
+#Look at only negative sentiment tweets.
+# Use corpus_subset to select only tweets with Positive sentiment.
+corpus_positive = corpus_subset(csv_corpus, sentiment == 'Positive')
+
+# We will take an additional look at the DFM next week. This week we will use it 
+# to generate a word cloud.
+tokens_positive = tokens(corpus_positive, remove_punct = TRUE)
+
+dfm_positive = dfm(tokens_positive)
+set.seed(40)  # for reproducibility
+textplot_wordcloud(dfm_nuclear_clean, 
+                   min_count = 5,  # minimum frequency of words to include
+                   max_words = 500,  # maximum number of words to display
+                   color = RColorBrewer::brewer.pal(8, "Dark2"),  # using a color palette
+                   scale = c(10, 1))  # scaling of word sizes, making them larger
+
+```
+
+```{r}
+dfm_positive = dfm(tokens_positive)
+set.seed(42)  # for reproducibility
+textplot_wordcloud(dfm_nuclear_clean, 
+                   min_count = 5,  # minimum frequency of words to include
+                   max_words = 500,  # maximum number of words to display
+                   color = RColorBrewer::brewer.pal(8, "Dark2"),  # using a color palette
+                   scale = c(10, 1))  # scaling of word sizes, making them larger
+```
+
+```{r}
+?textplot_wordcloud
+```
+
+
+```{r}
+
+# Calculate the frequency of each term in the cleaned DFM
+word_frequencies = textstat_frequency(dfm_nuclear_clean)
+
+# Extract the top 25 most frequent words
+top_25_words = head(word_frequencies, 25)
+
+print(top_25_words)
+
+```
+
+
+```{r}
+# Create our own set of docs
+tes = c(Mao = "Political power grows out the barrel of a gun.",
+ Kanye = "No one man should have all that power.",
+ Saying = "The quick brown fox jumped over the lazy dog.")
+```
+
+```{r}
+# Quick look at the DFM
+tec = corpus(tes)
+
+tokens(tec) %>% dfm()
+```
+
+
+
+
+
+
+
+
