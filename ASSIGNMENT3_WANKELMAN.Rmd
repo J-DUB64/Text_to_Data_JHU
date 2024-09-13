@@ -1,0 +1,340 @@
+---
+title: "ASSIGNMENT3_WANKELMAN"
+output: pdf_document
+date: "2024-02-12"
+---
+
+```{r}
+#install.packages('jsonlite')
+#install.packages('ndjson')
+#installed.packages('rjson')
+#installed.packages('pdftools')
+#installed.packages('tm')
+#devtools::install_github("hrbrmstr/jsonview")
+install.packages("stopwords")
+devtools::install_github("quanteda/stopwords")
+
+```
+
+```{r}
+# Load Libaraies
+library(quanteda)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(wordcloud2)
+library(readtext)
+library(tm)
+library(jsonview)
+library(pdftools)
+
+```
+
+```{r}
+?rjson::fromJSON
+```
+
+```{r}
+#Getting an Error, review
+rjson_reviews = rjson::fromJSON(file = '/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 3/Musical_Instruments_5.json')
+rjson_reviews
+```
+
+```{r}
+#Getting an Error, review
+lite_reviews = jsonlite::read_json('/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 3/Musical_Instruments_5.json')
+lite_reviews
+```
+
+```{r}
+?ndjson::stream_in
+```
+
+#### Question 1: Read in the attached JSON file and create a Quanteda corpus.
+```{r}
+ndjson_review = ndjson::stream_in('~/Desktop/JHU/Semester 2/Text to Data/Module 3/Musical_Instruments_5.json')
+ndjson_review
+```
+
+```{r}
+# Review selected column for context
+ndjson_review[1:10, 'reviewText'] 
+
+# Basic subsetting guide: https://www.statmethods.net/management/subset.html
+```
+
+```{r}
+# Create a corpus 
+corpus_reviews = corpus(ndjson_review$reviewText)
+
+```
+
+```{r}
+#Summary of our corpus
+summary(corpus_reviews)
+
+```
+#### Question 3: Preprocess the JSON: 
+##### Part 1: Remove all punctuation from both corpus.
+```{r}
+?tokens
+```
+
+```{r}
+# Tokenize the PDFs corpus
+tokens_corpus_reviews = tokens(corpus_reviews)
+```
+
+```{r}
+clean_tokens_reviews = tokens(tokens_corpus_reviews,
+                              remove_punct = TRUE,
+                              remove_url = TRUE,
+                              remove_separators = TRUE,
+                              split_hyphens = TRUE)
+
+clean_tokens_reviews
+clean_tokens_reviews %>% dfm()
+
+#Quanteda Team. Tokens. quanteda. Retrieved February 12, 2024, from https://quanteda.io/reference/tokens.html
+```
+
+
+#### Question 3: Preprocess the PDFs and JSON
+##### Part 2: Add at least 10 more unique stopwords and remove them from JSON corpus
+```{r}
+#Applying stopwords to PDF documents
+#https://stopwords.quanteda.io/
+
+stopwords::stopwords_getsources()
+stopwords::stopwords_getlanguages("snowball")
+?stopwords::stopwords
+stopwords::stopwords(source = "snowball", language = 'en')
+stopwords::stopwords(source = "nltk", language = 'en')
+
+class(stopwords::stopwords(source = "nltk", language = 'en'))
+
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+##### Review each JSON corpus and most unique tokens to decide which stopwords should be removed.
+```{r}
+#Drop stopwords with snowball.
+clean_tokens_reviews %>%
+  tokens_remove(pattern = stopwords::stopwords(source = "snowball", language = 'en')) %>% 
+  dfm() %>%
+  textstat_frequency(n=100)
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+```{r}
+#Select 10 specific terms or more to add to the stop words
+reviews_stopwords = c('one','just','can','get','also','$', 'way', 'go', '2', 'put', '1', '3', 'a', )
+new_reviews_stopwords = c(stopwords::stopwords(source = "snowball", language = 'en'),
+                         reviews_stopwords)
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+
+#Quanteda. Stopwords. Retrieved February 14, 2024, from https://stopwords.quanteda.io/
+```
+
+```{r}
+#check to ensure selected stopwords are added to list
+new_reviews_stopwords
+```
+
+```{r}
+clean_tokens_reviews %>%
+  tokens(tokens_corpus_reviews,
+         remove_punct = TRUE,
+         remove_url = TRUE,
+         remove_separators = TRUE,
+         split_hyphens = TRUE) %>%
+  tokens_remove(pattern = stopwords::stopwords(source = "snowball", language = 'en')) %>%
+  dfm()
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+#### Question 3: Preprocess the JSON:
+##### Part 3: Stem words/tokens in both corpus. Select any stemmer usable on English tokens.
+```{r}
+?tokens_wordstem
+```
+
+```{r}
+clean_tokens_reviews %>%
+  tokens(tokens_corpus_reviews,
+         remove_punct = TRUE,
+         remove_url = TRUE,
+         remove_separators = TRUE,
+         split_hyphens = TRUE) %>%
+  tokens_remove(pattern = new_reviews_stopwords) %>%
+  tokens_wordstem(language = 'en') %>%
+  dfm()
+  
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+#### Question 4: How many unique tokens were there in each of the unprocessed corpuses? How many are in each of the processed corpuses?
+The impact of applying stopwords and stemming techniques becomes evident in analyzing the data from unprocessed and processed corpuses. Initially, the unprocessed corpus contained 21,197 unique tokens across 10,261 documents. After applying stopwords, this number slightly decreased to 21,027 unique tokens, indicating a minimal reduction in the diversity of words used across the documents. This minor decrease underscores the nature of stopwords; these commonly used words, while frequent, do not significantly contribute to the overall linguistic diversity of the corpus. The removal of stopwords is crucial in text analysis as it helps to focus on more meaningful words that are likely to contribute to the sentiment of the text.
+
+The application of stemming further reduced the number of unique tokens to 14,933. Stemming, which consolidates words to their root forms, significantly impacts the analysis by reducing the complexity of the data. This process helps in highlighting the core themes and concepts present in the text by treating different forms of a word as a single entity, thus making it easier to analyze the frequency and relevance of specific topics. However, the weakness of stemming lies in its potential to oversimplify the data, merging words with different meanings if they share similar root forms, which could lead to a loss of specificity and sometimes misinterpretation of the text's content.
+
+The strength of using stopwords is its ability to filter out noise, making subsequent analysis more focused and efficient. For example, by removing common but uninformative words, we can better identify and analyze the key themes and sentiments expressed in the documents. On the other hand, the stemming process, while it significantly reduces the dimensionality of the data and aids in the consolidation of similar concepts, might introduce ambiguity by conflating words with distinct meanings but similar stems.
+
+The importance of these preprocessing steps in understanding words as data lies in their ability to refine the dataset, making it more amenable to analysis. By focusing on the more meaningful components of the text, we can derive more insightful and accurate interpretations of the underlying themes and sentiments. 
+
+Bengfort, B., Bilbro, R., & Ojeda, T. (2018). Applied Text Analysis: Enabling Language-Aware Data Products with Machine Learning. O'Reilly Media. https://learning.oreilly.com/library/view/applied-text-analysis/9781491963036/ch04.html
+
+Bernico, M. (2018). Deep Learning Quick Reference: Useful hacks for training and optimizing deep learning models with TensorFlow and Keras. O'Reilly Media. https://learning.oreilly.com/library/view/deep-learning-quick/9781788837996/f9d42804-9b6b-40a1-9498-ed86ba5ef301.xhtml
+#### Question 2: Read all Supreme Court opinion PDFs and create a Quanteda corpus.
+```{r}
+#Specify the path to the directory folder
+usc_cases_path = "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 3"
+
+cases_pdfs = readtext(paste0(usc_cases_path, "/*.pdf"),
+                     encoding = "ISO-8859-1")
+
+# Check the structure of the PDF documents
+str(cases_pdfs)
+
+#Quantitative Analysis of Textual Data. Importing Data from Multiple Files. Retrieved February 12, 2024, from https://tutorials.quanteda.io/import-data/multiple-files/
+```
+
+
+```{r}
+#Different ways to load multiple PDF files from video lecture that I want to be able to reference
+#pdf_files = readtext(file = "USC_Cases/*.pdf")
+#usc_corpus = corpus(pdf_files)
+#usc_corpus
+```
+
+
+```{r}
+# Create a corpus from the PDF documents
+cases_corpus <- corpus(cases_pdfs$text)
+
+# Check the structure of corpus
+print(cases_corpus)
+summary(cases_corpus)
+
+#Quanteda Tutorials. Corpus. Retrieved February 12, 2024, from https://tutorials.quanteda.io/basic-operations/corpus/corpus/
+```
+
+
+#### Question 3: Preprocess the PDFs: 
+##### Part 1: Remove all punctuation from corpus.
+```{r}
+?tokens
+```
+
+```{r}
+# Tokenize the PDFs corpus
+tokens_corpus_cases = tokens(cases_corpus)
+```
+
+```{r}
+#Remove all punctuation from PDF corpus.
+clean_tokens_cases = tokens(tokens_corpus_cases,
+                        remove_punct = TRUE,
+                        remove_url = TRUE,
+                        remove_separators = TRUE,
+                        split_hyphens = TRUE)
+
+clean_tokens_cases
+clean_tokens_cases %>% dfm()
+
+#Quanteda Team. Tokens. quanteda. Retrieved February 12, 2024, from https://quanteda.io/reference/tokens.html
+```
+
+#### Question 3: 
+##### Part 2: Add at least 10 more unique stopwords for PDF corpus and remove them from each corpus.
+
+```{r}
+#Applying stopwords to PDF documents
+#https://stopwords.quanteda.io/
+
+stopwords::stopwords_getsources()
+stopwords::stopwords_getlanguages("snowball")
+?stopwords::stopwords
+stopwords::stopwords(source = "snowball", language = 'en')
+stopwords::stopwords(source = "nltk", language = 'en')
+
+class(stopwords::stopwords(source = "nltk", language = 'en'))
+
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+```{r}
+#Drop stopwords.
+clean_tokens_cases %>% 
+  tokens_remove(pattern = stopwords::stopwords(source = "nltk", language = 'en')) %>%
+  dfm() %>%
+  textstat_frequency(n=200)
+
+#Quanteda Initiative. Stopwords. Retrieved February 14, 2024, from https://stopwords.quanteda.io/
+```
+
+```{r}
+#Select 10 specific terms or more to add to the stop words
+cases_stopwords = c(
+  'u', 'v', 'can', 'get', 'also', '$', 'way', 'go', '2', 'put', '1', '3', 'a',
+  'court', 'footnote', 'may', 'rights', 'interrogation', 'right', 'admissions', 'race',
+  'state', 'program', 'states', 'school', 'would', 'special', 'police', 'case', 'amendment',
+  'upon', 'law', 'cases', 'one', 'see', 'white', 'equal', 'must', 'individual', 'page', 'privilege')
+new_cases_stopwords = c(stopwords::stopwords(source = "nltk", language = 'en'), cases_stopwords)
+
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+
+#Quanteda. Stopwords. Retrieved February 14, 2024, from https://stopwords.quanteda.io/
+```
+
+```{r}
+#check to ensure selected stopwords are added to list
+new_cases_stopwords
+```
+
+```{r}
+clean_tokens_cases %>%
+  tokens(tokens_corpus_cases,
+         remove_punct = TRUE,
+         remove_url = TRUE,
+         remove_separators = TRUE,
+         split_hyphens = TRUE) %>%
+  tokens_remove(pattern = stopwords::stopwords(source = "snowball", language = 'en')) %>%
+  dfm()
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+#### Question 3: Preprocess the PDFs:
+##### Part 3: Stem words/tokens in both corpus. Select any stemmer usable on English tokens.
+```{r}
+?tokens_wordstem
+```
+
+```{r}
+clean_tokens_cases %>%
+  tokens(clean_tokens_cases,
+         remove_punct = TRUE,
+         remove_url = TRUE,
+         remove_separators = TRUE,
+         split_hyphens = TRUE) %>%
+  tokens_remove(pattern = new_reviews_stopwords) %>%
+  tokens_wordstem(language = 'en') %>%
+  dfm()
+  
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+#### Question 4: How many unique tokens were there in each of the unprocessed corpuses? How many are in each of the processed corpuses?
+In my analysis, I observed the effects of applying stopword removal and stemming to a corpus consisting of 6 Supreme Court Opinion PDF documents, initially featuring 5,784 unique tokens. The application of stopwords slightly reduced the token count to 5,652, refining the dataset by filtering out common words that contribute little to semantic analysis. Further processing through stemming significantly consolidated the token count to 4,015, further filtering out common words.
+
+### Question 5: How did stemming work on the Supreme Court corpus? Consider why stemming may or may not work for the Supreme Court cases. Should we use stemming on techincal documents?
+Stemming reduced the number of unique tokens from 5,784 to 4,015, illustrating its efficacy in condensing the dataset by merging derivationally related words into their root forms. This process was beneficial for highlighting core themes and facilitating a more streamlined analysis. However, in the context of Supreme Court cases, which often involve complex legal language and precise terminology, concerns about stemming arise with the potential oversimplification of the process, resulting in the loss of information. The merging of words with nuanced differences in meaning could lead to a loss of specificity crucial for legal analysis, where every term might carry significant implications. Therefore, while stemming proves useful for general text analysis by reducing complexity and highlighting dominant themes, its application to technical documents, such as Supreme Court cases, warrants caution. 
+
+
