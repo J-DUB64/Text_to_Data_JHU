@@ -1,0 +1,123 @@
+---
+title: "Wankelman Assignment 2"
+output: pdf_document
+date: "2024-02-05"
+---
+
+```{r eval=TRUE, echo=TRUE}
+#Load Libraries
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(wordcloud2)
+```
+
+```{r}
+#Load Dataset
+legislative_studies = read.csv("~/Desktop/JHU/Semester 2/Text to Data/Module 2/19_20_Legislation_Title_Clean.csv",
+                               header = TRUE,
+                               stringsAsFactors = FALSE) 
+```
+
+```{r}
+# Question 1: Read in attached CSV into tidytext.
+tidy_legislative = tibble(legislative_studies)
+tidy_legislative
+```
+
+```{r}
+
+# assign integers as document IDs.
+legislative_studies$doc_id = seq.int(nrow(legislative_studies))
+
+# Create a corpus. Use 'text_field' to identify the right text column
+csv_corpus = corpus(legislative_studies, text_field = 'Latest.Title')
+
+#Referenced Assignment 1
+```
+
+```{r}
+# Let's look at the summary of our corpus
+summary(csv_corpus)
+
+#Referenced Assignment 1
+```
+
+```{r}
+# Question 2:What is the number of tokens in the dataset? 
+# How many tokens (words) are in the corpus?
+# Change the corpus to tokens
+tokens_corpus = tokens(csv_corpus)
+
+# Determine number of tokens
+total_tokens = sum(ntoken(tokens_corpus))
+print(total_tokens)
+# Referenced Assignment 1
+```
+
+```{r}
+summary(csv_corpus[5])
+# Referenced Assignment 1
+```
+
+```{r}
+#Question 3: How many tokens are in the 5th document?
+# Extract the fifth document from the corpus and convert it to tokens
+tokens_fifth_doc = tokens(csv_corpus[5])
+
+# Directly count and print the number of tokens in the fifth document
+ntoken(tokens_fifth_doc)
+
+#Quanteda. "Count the number of tokens or types." Accessed January 30, 2024. https://quanteda.io/reference/ntoken.html. 
+```
+
+```{r}
+#Question 3: How many tokens are in the 5th document?
+tokens_5th = tidy_legislative %>%
+  slice(5) %>% # Wickham, H., François, R., Henry, L., & Müller, K. (n.d.). slice. dplyr: A Grammar of Data Manipulation. Retrieved from https://dplyr.tidyverse.org/reference/slice.html
+  unnest_tokens(word, Latest.Title) %>% # Silge, J., & Robinson, D. (n.d.). unnest_tokens. Text Mining with R: A Tidy Approach. Retrieved from https://www.tidytextmining.com/tidytext.html
+  summarise(total_tokens = n())
+
+print(tokens_5th)
+```
+
+```{r}
+tidy_legislative %>% 
+  unnest_tokens(word, Latest.Title) %>% #Separate words per document
+  count(word, sort=TRUE) #Count the occurrences of the words
+```
+
+```{r}
+#install.packages("quanteda.textstats")
+
+tidy_legislative %>%
+  corpus(text_field = 'Latest.Title') %>%
+  tokens() %>%
+  dfm() %>%
+  textstat_frequency(n=500) 
+```
+
+```{r}
+#install.packages("wordcloud2")
+
+word_freq = tidy_legislative %>% 
+  corpus(text_field = 'Latest.Title') %>%
+  tokens() %>%
+  dfm() %>%
+  textstat_frequency(n=500) 
+# Silge, J., & Robinson, D. (n.d.). Text Mining with R: A Tidy Approach. Retrieved from https://www.tidytextmining.com/tidytext.html
+
+  wordcloud2(data = word_freq, size = 0.7, shape = 'square')
+  # R Graph Gallery. (n.d.). The Wordcloud2 library. Retrieved 2024, 02 06, from https://r-graph-gallery.com/196-the-wordcloud2-library.html
+```
+
+```{r}
+word_freq = tidy_legislative %>% #Assign results to word_freq variable to store processed data
+  unnest_tokens(word, Latest.Title) %>% #Tokenize text data
+  count(word, sort = TRUE) %>% #Count the occurrences of the words
+  filter(n > 1) #filter out words that 
+  # Silge, J., & Robinson, D. (n.d.). Text Mining with R: A Tidy Approach. Retrieved from https://www.tidytextmining.com/tidytext.html
+
+  wordcloud2(data = word_freq, size = 0.7, shape = 'circle') # Create word cloud with specified data
+  # R Graph Gallery. (n.d.). The Wordcloud2 library. Retrieved 2024, 02 06, from https://r-graph-gallery.com/196-the-wordcloud2-library.html
+```
