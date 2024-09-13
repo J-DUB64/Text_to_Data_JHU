@@ -1,0 +1,1027 @@
+---
+title: "ASSIGNMENT10_WANKELMAN"
+output: pdf_document
+date: "2024-04-08"
+---
+
+#### Subreddit
+Climate Change and Environmental Focus:
+/r/RenewableEnergy: Discussions on renewable energy sources, technologies, policies, and the latest developments.
+/r/sustainability: Focuses on sustainability practices, technologies, and strategies to achieve environmental sustainability.
+/r/ZeroWaste: Community dedicated to strategies, practices, and challenges in reducing waste and living a zero-waste lifestyle.
+/r/ecology: Scientific discussions on ecology, conservation, and the science behind environmental preservation.
+/r/environmental_science: For discussions related to environmental science, research, and findings.
+/r/ClimateOffensive: A proactive subreddit focusing on actions and movements to combat climate change.
+Finance and Investing with a Focus on Sustainability:
+/r/Renewables: Discussions on investing in renewable energy sectors, including solar, wind, and other clean technologies.
+/r/EthicalInvesting: Focuses on investing strategies that prioritize ethical considerations, including environmental stewardship.
+/r/GreenTech: Investment discussions around green technologies, startups, and innovations driving sustainability.
+/r/SociallyResponsibleInvest: A subreddit dedicated to socially responsible investing practices, with a focus on creating positive social and environmental impacts.
+General Finance and Investing:
+/r/stocks: A place for stock market discussions, including analyses, news, and investment strategies.
+/r/Bogleheads: Focused on investing advice based on the principles of Jack Bogle, founder of Vanguard, including index fund investing which can include ESG funds.
+/r/FinancialIndependence: Discussions on achieving financial independence, where ethical and sustainable investing can also be a topic.
+/r/InvestmentClub: A subreddit where community members discuss and collectively invest in stocks, including those with green credentials.
+/r/ValueInvesting: Focuses on value investing strategies, where discussions about the value of green and sustainable investments can occur.
+Additional Subreddits for Broader Insights:
+/r/solar: Specifically focused on solar energy technology, investments, and industry news.
+/r/UrbanPlanning: Discussions on sustainable urban development, which can include green finance for sustainable cities.
+/r/ClimateBrawl: A place for more heated debates on climate change, policies, and related investments.
+/r/EcoFriendly: A community for sharing eco-friendly products, technologies, and lifestyle choices, which can include discussions on supporting green companies through investments.
+
+
+```{r}
+# Load Libraries
+library(quanteda)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(readtext)
+library(tm)
+library(jsonview)
+library(quanteda)
+library(stopwords)
+library(stringr)
+library(ldatuning)
+library(plotly)
+library(tidyr)
+library(LDAvis)
+library(tsne)
+library(Rtsne)
+library(lda)
+library(furrr) # For parallel processi
+library(e1071)
+library(quanteda)
+library(caret)
+library(naivebayes)
+library(dplyr)
+set.seed(42)
+```
+
+
+```{r}
+library(httr)
+
+reddit_url = "https://www.reddit.com/api/v1/access_token"
+key = "WsclNrNPGYnm0lAcIk2Xaw"  
+secret = "ZTJzC_NHDUqjaEpABwdJRDY90FwwsQ"
+username = "PsychologyObvious81" 
+password = "Dominate2024{}!*"
+
+
+response = request("https://www.reddit.com/api/v1/access_token") |>
+  req_auth_basic(key, secret) |>
+  req_body_form(grant_type = "password", username = username, password = password) |>
+  req_perform()
+
+
+if (response$status_code == 200) {
+  content_list = resp_body_json(response)
+  token = content_list$access_token
+} else {
+  print(paste("Error with request, status code:", response$status_code))
+}
+
+
+#Reddit. Reddit API documentation. Retrieved from https://www.reddit.com/dev/api
+```
+
+
+```{r}
+
+library(httr)
+library(jsonlite)
+library(future)
+library(future.apply)
+
+# Set up parallel processing
+plan(multisession, workers = 5)
+
+# Initialize the dataframe to store results
+results_df = data.frame(
+  subreddit = character(),
+  post_id = character(),
+  post_title = character(),
+  post_body = character(),
+  post_date = character(), # Column for post date
+  comment_id = character(),
+  comment_body = character(),
+  comment_date = character(), # New column for comment date
+  stringsAsFactors = FALSE
+)
+
+# Define your subreddits and search queries
+subreddits = c ("stocks", "Bogleheads", "FinancialIndependence", "InvestmentClub", "ValueInvesting", "solar", "UrbanPlanning", "ClimateBrawl", "EcoFriendly")
+
+search_queries = c(
+  '("climate change" OR "global warming") AND (finance OR "financial impacts" OR "economic impacts")',
+  '("green finance" OR "sustainable finance") AND (investments OR "investment strategies" OR "financial products")',
+  '("sustainable investing" OR "impact investing" OR "responsible investing") AND (trends OR "market trends" OR insights)',
+  '("ESG investing" OR "environmental, social, and governance investing") AND (performance OR "market performance" OR returns)',
+  '("climate risk" OR "environmental risk") AND (insurance OR "risk management" OR "financial planning")',
+  '("clean technology" OR "cleantech" OR "green technology") AND (startups OR "new ventures" OR "innovation")',
+  '("climate policy" OR "environmental policy") AND ("economic effects" OR "market response" OR "industry adaptation")',
+  '("fossil fuel divestment" OR "divesting from fossil fuels") AND ("success stories" OR cases OR "case studies")',
+  '("green bonds" OR "sustainability bonds") AND ("investment opportunities" OR returns OR "market analysis")',
+  '("environmental impact" OR "social impact") AND ("investment criteria" OR "investment decisions" OR "portfolio management")')
+
+
+for (subreddit in subreddits) {
+  for (search_query in search_queries) {
+    Sys.sleep(15) # Respect Reddit's rate limiting
+    
+    # Formulate the request URL with enhanced search parameters
+    url = sprintf("https://www.reddit.com/r/%s/search.json?q=%s&restrict_sr=1&sort=new&limit=100",
+                  subreddit, URLencode(search_query))
+    
+    user_agent <- "User-Agent: R:com.example.yourapp:v1.0 (by /u/PsychologyObvious81)"
+    response <- GET(url, add_headers(Authorization = sprintf("Bearer %s", access_token), `User-Agent` = user_agent))
+
+  
+    if (response$status_code == 200) {
+      content = jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE)
+      if (!is.null(content$data) && !is.null(content$data$children)) {
+        posts = content$data$children
+        for (post in posts) {
+          Sys.sleep(10)  # Delay for comments request
+          # Assuming post$data$permalink includes the full path to the post, just append ".json?limit=300" to fetch comments
+          comments_url = paste0("https://www.reddit.com", post$data$permalink, ".json?limit=300")
+
+          # Assuming 'access_token' is defined and valid
+          comments_response = httr::GET(comments_url, httr::add_headers(Authorization = sprintf("Bearer %s", access_token), `User-Agent` = user_agent))
+
+          
+          if (comments_response$status_code == 200) {
+            comments_content = jsonlite::fromJSON(rawToChar(comments_response$content), simplifyVector = FALSE)
+            if (length(comments_content) >= 2 && !is.null(comments_content[[2]]$data) && !is.null(comments_content[[2]]$data$children)) {
+              comments = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$body)) x$data$body else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_ids = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$id)) x$data$id else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_dates = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$created_utc)) as.POSIXct(x$data$created_utc, origin="1970-01-01", tz="GMT") else NA, simplify = FALSE, USE.NAMES = FALSE)
+              
+              # Convert Unix timestamp to readable date for posts
+              post_date = as.POSIXct(post$data$created_utc, origin="1970-01-01", tz="GMT")
+              
+              if (length(comments) > 0) {  # Ensure there are comments before proceeding
+                for (i in seq_along(comments)) {
+                  temp_df = data.frame(
+                    subreddit = subreddit,
+                    post_id = post$data$id,
+                    post_title = post$data$title,
+                    post_body = post$data$selftext,
+                    post_date = post_date, # Add post date to the data frame
+                    comment_id = comment_ids[[i]],
+                    comment_body = comments[[i]],
+                    comment_date = comment_dates[[i]], # Add comment date to the data frame
+                    stringsAsFactors = FALSE
+                  )
+                  results_df = rbind(results_df, temp_df)
+                }
+              } else {  # No comments, but include post data anyway with NA for comment fields
+                temp_df = data.frame(
+                  subreddit = subreddit,
+                  post_id = post$data$id,
+                  post_title = post$data$title,
+                  post_body = post$data$selftext,
+                  post_date = post_date, # Add post date even for posts without comments
+                  comment_id = NA,
+                  comment_body = NA,
+                  comment_date = NA, # No comment date available
+                  stringsAsFactors = FALSE
+                )
+                results_df = rbind(results_df, temp_df)
+              }
+            }
+          }
+        }
+      } else {
+        print(paste("No data found for subreddit:", subreddit))
+      }
+    } else {
+      message("Request failed with status code: ", response$status_code, " for subreddit: /r/", subreddit)
+    }
+  }
+}
+
+# Write results to CSV with more descriptive filename and include date
+write.csv(results_df, sprintf("reddit_discussions_%s.csv", Sys.Date()), row.names = FALSE)
+
+
+#Citation to figure out how to successfully do a Reddit API pullrequest
+#Broman, K. (n.d.). APIs for social scientists. Bookdown. Retrieved from https://bookdown.org/paul/apis_for_social_scientists/reddit-api.html#prerequisites-15
+
+#Korkmaz, S. (2016, July 4). Accessing Web Data (JSON) in R using httr. DataScience+. Retrieved from https://datascienceplus.com/accessing-web-data-json-in-r-using-httr/
+
+#Wickham, H. Quickstart. httr. Retrieved from https://httr.r-lib.org/articles/quickstart.html
+
+#Reddit. OAuth2. GitHub. Retrieved from https://github.com/reddit-archive/reddit/wiki/OAuth2
+
+#rymur. Overview. Retrieved from https://rymur.github.io/overview
+
+#Reddit. Reddit Developer Services. Reddit Help. Retrieved from https://support.reddithelp.com/hc/en-us/articles/14945211791892-Reddit-Developer-Services
+
+#OpenAI. OpenAI. 03/10/2024 Retrieved from https://www.openai.com
+
+#AlpsCode. (2021, January 11). How to use Reddit API. AlpsCode. Retrieved from https://alpscode.com/blog/how-to-use-reddit-api/
+
+#rymur. Setup. Retrieved from https://rymur.github.io/setup 
+
+#Learn R. Reading CSV files. Retrieved from https://learn-r.org/r-tutorial/read-csv.php
+
+#R Documentation. write.table. Retrieved from https://www.rdocumentation.org/packages/utils/versions/3.6.2/topics/write.table
+```
+
+
+
+
+```{r}
+#Load CSV
+envinvest_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 10/green_reddit_discussions.csv",
+                                stringsAsFactors = FALSE)
+```
+
+
+```{r}
+colnames(envinvest_reddit)
+```
+
+```{r}
+head(envinvest_reddit, n = 15)
+```
+
+```{r}
+# As always we explore out data
+# Check the size
+# There are often functions that you may want to reuse
+view_dim = function(envinvest_reddit){
+    
+    # Get the dimensions (row x column)
+    dimensions = dim(envinvest_reddit)
+    
+    # Print it out to view. There are other ways but this is simple
+    print(paste("Number of Columns: ", dimensions[2]))
+    print(paste("Number of Rows: ", dimensions[1]))
+    
+    # Also get the colnames
+    print('COLUMN NAMES:')
+    print(colnames(envinvest_reddit))
+    
+    print(head(envinvest_reddit))
+    print("\n---------------------\n")
+}
+
+# Now view the data 
+view_dim(envinvest_reddit)
+```
+[1] "Number of Columns:  15"
+[1] "Number of Rows:  4678"
+```{r}
+#Check for NA
+anyNA(envinvest_reddit$comment_body)
+```
+
+```{r}
+#Check how many NA's
+sum(is.na(envinvest_reddit$comment_body))
+
+```
+
+```{r}
+#Check which observations have NA's
+which(is.na(envinvest_reddit$comment_body))
+
+```
+
+```{r}
+#Load CSV
+envinvest_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 10/green_reddit_discussions_cleaned.2.csv",
+                                stringsAsFactors = FALSE)
+```
+
+```{r}
+colnames(envinvest_reddit)
+```
+
+
+```{r}
+# As always we explore out data
+# Check the size
+# There are often functions that you may want to reuse
+view_dim = function(envinvest_reddit){
+    
+    # Get the dimensions (row x column)
+    dimensions = dim(envinvest_reddit)
+    
+    # Print it out to view. There are other ways but this is simple
+    print(paste("Number of Columns: ", dimensions[2]))
+    print(paste("Number of Rows: ", dimensions[1]))
+    
+    # Also get the colnames
+    print('COLUMN NAMES:')
+    print(colnames(envinvest_reddit))
+    
+    print(head(envinvest_reddit))
+    print("\n---------------------\n")
+}
+
+# Now view the data 
+view_dim(envinvest_reddit)
+```
+[1] "Number of Columns:  15"
+[1] "Number of Rows:  4444"
+
+
+
+```{r}
+#Check how many NA's
+sum(is.na(envinvest_reddit$comment_body))
+
+```
+
+
+```{r}
+#Clean comment text
+clean_comment_body = envinvest_reddit %>%
+  mutate(
+    comment_body = str_remove_all(comment_body, "\\n"), # Remove all newline characters
+    comment_body = str_remove_all(comment_body, "\\r"), # Remove all occurrences of \r
+    comment_body = str_remove_all(comment_body, "\\t")  # Remove all tab characters
+  )
+
+head(clean_comment_body, n = 10)
+
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+# Remove duplicates based on 'post_body'
+clean_comment_body = clean_comment_body %>% 
+  distinct(comment_body, .keep_all = TRUE)
+
+```
+
+
+
+```{r}
+# Create a corpus for the post_body text
+corpus_comment = corpus(clean_comment_body$comment_body)
+corpus_polarity_score = corpus(clean_comment_body$polarity_score)
+
+#include clean post_body and post_title
+```
+
+
+```{r}
+# Print unique labels and first 10 labels
+print(head(unique(clean_comment_body$comment_body), 10))
+print(head(clean_comment_body$polarity_score, 10))
+
+
+```
+
+#### Create Comment DFM
+```{r}
+# Basic statistics of each corpus
+summary(corpus_comment)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_comment_trim = tokens(corpus_comment, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+  tokens_remove(pattern=stopwords::stopwords(language = 'en'))
+
+dfm_comment = dfm(tokens_comment_trim) %>%
+  dfm_trim(min_termfreq = 0.4, 
+           termfreq_type = 'quantile',
+           max_docfreq = 0.3,
+           docfreq_type = "prop")
+
+dfm_comment
+
+```
+
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+
+expanded_stopwords = c(
+  stopwords::stopwords(language = 'en', source = 'snowball'),
+  stopwords::stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords::stopwords(language = 'en', source = 'smart'),
+  stopwords::stopwords(language = 'en', source = 'marimo'),
+  stopwords::stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+) %>% 
+  unique()
+```
+
+
+```{r}
+# Rerun the tokenize the corpus with extended stopwords
+tokens_comment = tokens(corpus_comment,  remove_punct = TRUE, 
+          remove_url = TRUE, 
+          remove_numbers = TRUE,
+          remove_symbols = TRUE) %>%
+tokens_remove(pattern = expanded_stopwords)
+dfm_comment = dfm(tokens_comment) %>%
+dfm_trim(min_termfreq = 0.3, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.5, 
+         docfreq_type = "prop")
+
+top_comment_terms = topfeatures(dfm_comment, 30)
+print(top_comment_terms)
+```
+
+```{r}
+# Create a vector graph from top words
+top_terms_df = data.frame(
+  term = names(top_comment_terms),
+  frequency = top_comment_terms
+)
+
+# Create a relevance score 
+top_terms_df$relevance = sqrt(top_terms_df$frequency)
+
+# Order the dataframe for better visualization
+top_terms_df = top_terms_df %>%
+  arrange(desc(frequency))
+
+# Now, create the bubble chart with the correct dataframe
+ggplot(top_terms_df, aes(x = reorder(term, frequency), y = frequency, size = relevance, color = term)) +
+  geom_point(alpha = 0.7) +  # Use alpha for better visibility
+  scale_color_viridis_d(begin = 0.2, end = 0.8, option = "C") + 
+  theme_minimal() +
+  labs(title = "Terms Frequency and Relevance", x = "Term", y = "Frequency") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+dfm_comment
+
+```
+
+```{r}
+# As always we explore out data
+# Check the size
+# There are often functions that you may want to reuse
+view_dim = function(dfm_comment){
+    
+    # Get the dimensions (row x column)
+    dimensions = dim(dfm_comment)
+    
+    # Print it out to view. There are other ways but this is simple
+    print(paste("Number of Columns: ", dimensions[2]))
+    print(paste("Number of Rows: ", dimensions[1]))
+    
+    # Also get the colnames
+    print('COLUMN NAMES:')
+    print(colnames(envinvest_reddit))
+    
+    print(head(envinvest_reddit))
+    print("\n---------------------\n")
+}
+
+# Now view the data 
+view_dim(dfm_comment)
+```
+"Number of Columns:  8779"
+[1] "Number of Rows:  1503"
+
+### Create polarity_score DFM
+
+```{r}
+# Basic statistics of each corpus
+summary(corpus_polarity_score)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_polarity_trim = tokens(corpus_polarity_score, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+  tokens_remove(pattern=stopwords::stopwords(language = 'en'))
+
+dfm_polarity_score = dfm(tokens_polarity_trim ) %>%
+  dfm_trim(min_termfreq = 0.4, 
+           termfreq_type = 'quantile',
+           max_docfreq = 0.3,
+           docfreq_type = "prop")
+
+dfm_polarity_score
+
+```
+
+#Create the topicmodels 
+```{r}
+library(topicmodels)
+# dfm_body is properly formatted for use with topicmodels
+dtm_comment = convert(dfm_comment, to = 'topicmodels')
+
+
+# Explicitly use the LDA function from the topicmodels package
+lda_comment_model = topicmodels::LDA(dtm_comment, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_comment_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_comment_terms = terms(lda_comment_model, 10) 
+print(lda_comment_terms)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_comment_tune = FindTopicsNumber(
+  dtm_comment,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_comment_tune$results, is.finite))){
+  plot(lda_comment_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 15
+lda_optimal_comment_model = LDA(dtm_comment, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_comment_terms = topicmodels::terms(lda_optimal_comment_model, 15) 
+print(lda_optimal_comment_terms)
+
+```
+
+```{r}
+lda_optimal_comment_model = LDA(dtm_comment, k = 15)
+
+topicmodels::terms(lda_optimal_comment_model, 20)
+
+```
+
+
+
+```{r}
+#Create a bar graph
+
+
+
+```
+
+
+
+
+```{r}
+library(LDAvis)
+library(tsne)
+library(topicmodels)
+library(slam) 
+
+# Extract the beta matrix (terms) and the gamma matrix (topics) from the model
+beta = lda_optimal_comment_model@beta
+gamma = lda_optimal_comment_model@gamma
+
+# Transform to 'phi' and 'theta' as expected by LDAvis
+# Normalize phi to ensure each row sums to 1
+phi = t(apply(beta, MARGIN = 1, FUN = function(x) x / sum(x)))
+
+# Ensure theta has documents as rows and topics as columns
+# Normalize theta if necessary, each row should sum to 1
+theta = t(apply(gamma, MARGIN = 1, FUN = function(x) x / sum(x)))
+
+# Get the vocabulary and document lengths from the DTM
+if (!inherits(dtm_comment, "DocumentTermMatrix")) {
+  stop("dtm_comment must be a DocumentTermMatrix object.")
+}
+vocab = colnames(dtm_comment)
+doc.length = row_sums(dtm_comment)
+
+# Get the term frequency from the DTM
+term.freq = col_sums(dtm_comment)
+
+
+# Create the JSON object required for visualization
+json = LDAvis::createJSON(
+  phi = phi,
+  theta = theta,
+  vocab = vocab,
+  doc.length = doc.length,
+  term.frequency = term.freq
+  # mds.method = tsne 
+)
+
+# Visualize the LDA topics
+LDAvis::serVis(json)
+
+#OpenAI. (2024). 
+
+```
+
+Error in stats::cmdscale(dist.mat, k = 2) : NA values not allowed in 'd'
+
+#Naive Bayes
+
+```{r}
+# Ensure 'polarity_score' is treated as a factor
+envinvest_reddit$polarity_score = as.factor(envinvest_reddit$polarity_score)
+levels(envinvest_reddit$polarity_score) <- gsub("Postive", "Positive", levels(envinvest_reddit$polarity_score))
+
+# Print levels to verify they are corrected
+print(levels(envinvest_reddit$polarity_score))
+
+```
+
+
+```{r}
+# Convert DFM to matrix
+train_comment_matrix = as.matrix(dfm_comment)
+```
+
+
+```{r}
+# Initially match 'dependent' length to the DFM by ensuring same order
+dependent = envinvest_reddit$polarity_score[1:nrow(train_comment_matrix)]
+```
+
+```{r}
+# Checking for NAs and keeping only complete cases
+complete_cases = complete.cases(train_comment_matrix, dependent)
+train_comment_matrix = train_comment_matrix[complete_cases, ]
+dependent = dependent[complete_cases]
+```
+
+```{r}
+# Print dimensions to ensure they match
+cat("Dimensions of train_comment_matrix:", dim(train_comment_matrix), "\n")
+cat("Length of dependent variable:", length(dependent), "\n")
+```
+
+```{r}
+?naiveBayes
+```
+
+```{r}
+# Create Prediction with training model
+if (nrow(train_comment_matrix) > 0 && length(dependent) > 0) {
+    nb = naiveBayes(x = train_comment_matrix, y = dependent, method = 'class')
+    nb_prediction = predict(nb, train_comment_matrix)
+
+    # Check the prediction output
+    if (length(nb_prediction) > 0) {
+        print(head(nb_prediction, n = 20))
+        results = data.frame(Predictions = nb_prediction, Actuals = dependent)
+        print(head(results, n = 20))
+    } else {
+        cat("No predictions were made.\n")
+    }
+} else {
+    stop("No rows to train on or no dependent data available.")
+}
+
+
+```
+
+
+### K-Means
+
+```{r}
+set.seed(123)
+#Research the logic in number selection with code
+comment_kmeans = kmeans(
+  x = train_comment_matrix, # All operations are done on our DFM
+  center = 36, 
+  iter.max = 200 
+)
+```
+
+
+```{r}
+comment_kmeans
+```
+
+
+
+```{r}
+#Add Cluster back in my CSV to view results
+clean_comment_body$clusters = comment_kmeans$cluster
+clean_comment_body[, c('comment_body', 'clusters')]
+```
+
+```{r}
+#Explore the output of a cluster
+clean_comment_body %>% 
+  filter(clusters == 18) %>% 
+  select(comment_body)
+```
+
+```{r}
+length(unique(clean_comment_body$comment_body))
+```
+
+```{r}
+?fviz_nbclust
+```
+
+```{r}
+library(factoextra)
+# Check for NA, NaN, or Inf values in the dataset
+summary(clean_comment_body) #  summary of the data,s
+# Check for any NA values in the entire dataframe
+anyNA(clean_comment_body)
+
+# Again clean_post_text is a dataframe to avoid elbow error
+if("post_body" %in% names(clean_comment_body)) {
+  # Check for NA values in a specific column
+  anyNA(clean_comment_body$comment_body)
+
+  # If you need to check for unique entries
+  length(unique(clean_comment_body$comment_body))
+}
+```
+
+```{r}
+#Had to take these steps because I kept getting this error: Error in do_one(nmeth) : NA/NaN/Inf in foreign function call (arg 1)
+post_comment_matrix = convert(dfm_comment, to = 'matrix')
+
+# Ensure there are no NA, NaN, or Inf values in this matrix
+post_comment_matrix[is.na(post_comment_matrix)] = 0
+post_comment_matrix[is.nan(post_comment_matrix)] = 0
+post_comment_matrix[is.infinite(post_comment_matrix)] = 0
+
+# Now create the elbow
+elbow = fviz_nbclust(post_comment_matrix,
+                      FUNcluster = kmeans,
+                      method = 'wss',
+                      k.max = 18,
+                      verbose = TRUE)
+print(elbow)
+```
+
+```{r}
+silhouette = fviz_nbclust(post_comment_matrix,
+                          kmeans,
+                          method = 'silhouette',
+                          k.max = 18,
+                          verbose = TRUE)
+print(silhouette)
+```
+
+
+
+```{r}
+post_comment_pam = cluster::pam(
+  x = post_comment_matrix,
+  k = 5,
+  diss = FALSE,
+  pamonce = 5,
+  cluster.only = TRUE,
+  trace.lev = 18
+)
+
+post_comment_pam
+```
+
+# K-Folds
+
+```{r}
+# Split the data into a training set and testing sets
+comment_folds_10 = createFolds(envinvest_reddit$polarity_score, k = 10)
+```
+
+
+```{r}
+# Check what folds is
+class(comment_folds_10) # What type of data structure
+comment_folds_10 # Take a look what is in the folds themselves
+```
+
+```{r}
+?lapply
+```
+
+
+```{r}
+# Load necessary libraries
+library(e1071)   # SVM support
+library(caret)   # Model evaluation
+library(Matrix)  # Sparse matrix operations
+set.seed(123)    # Ensure reproducibility
+
+# Function to perform SVM analysis and return model performance
+perform_svm_analysis = function(data_matrix, labels, folds) {
+  results = lapply(folds, function(fold_indices) {
+    train_indices = setdiff(1:nrow(data_matrix), fold_indices)
+    test_indices = fold_indices
+    
+    # Prepare training and testing datasets
+    train_data = data_matrix[train_indices, , drop = FALSE]
+    test_data = data_matrix[test_indices, , drop = FALSE]
+    train_labels = labels[train_indices]
+    test_labels = labels[test_indices]
+    
+    # Fit SVM model and predict
+    model = svm(train_labels ~ ., data = train_data)
+    predictions = predict(model, test_data)
+    
+    # Evaluate model using confusion matrix
+    cm = confusionMatrix(predictions, test_labels, mode = 'prec_recall')
+    print(cm$table)
+    print(cm$overall["Accuracy"])
+    list(confusion_matrix = cm$table, accuracy = cm$overall["Accuracy"])
+  })
+  
+  # Return list of results for each fold
+  results
+}
+
+```
+
+
+```{r}
+#Redoing a lot code because of errors experienced
+comment_body_matrix = as.matrix(dfm_comment)  # Convert DFM to a regular matrix again...
+polarity_scores = envinvest_reddit$polarity_score[1:nrow(comment_body_matrix)]  # Align labels
+
+# Filter complete cases to ensure data integrity
+complete_indices = complete.cases(comment_body_matrix, polarity_scores)
+comment_body_matrix = comment_body_matrix[complete_indices, ]
+polarity_scores = polarity_scores[complete_indices]
+
+# Calculate variance for each column and filter out those with zero variance
+variances = apply(comment_body_matrix, 2, var)
+comment_body_matrix = comment_body_matrix[, variances > 0]
+
+# Check if any columns were removed
+print(paste("Columns retained:", sum(variances > 0)))
+
+
+# Recreate folds ensuring they are within the actual row count of the matrix
+comment_folds_10 = createFolds(polarity_scores, k = 10, list = TRUE, returnTrain = FALSE)
+
+# Adjust the function to improve indices function
+perform_svm_analysis = function(data_matrix, labels, folds) {
+  results = lapply(folds, function(fold_indices) {
+    # Ensure fold indices are within the current data range to fix error
+    fold_indices = fold_indices[fold_indices <= nrow(data_matrix)]
+    train_indices = setdiff(1:nrow(data_matrix), fold_indices)
+    
+    if (length(fold_indices) == 0) {
+      return(NA)
+    }
+    
+    train_data = data_matrix[train_indices, , drop = FALSE]
+    test_data = data_matrix[fold_indices, , drop = FALSE]
+    train_labels = labels[train_indices]
+    test_labels = labels[fold_indices]
+    
+    model = svm(train_labels ~ ., data = train_data)
+    predictions = predict(model, test_data)
+    cm = confusionMatrix(predictions, test_labels, mode = 'prec_recall')
+    list(confusion_matrix = cm$table, accuracy = cm$overall["Accuracy"])
+  })
+  results
+}
+
+
+```
+
+```{r}
+# Check dimensions after filtering
+cat("Dimensions of comment_body_matrix:", dim(comment_body_matrix), "\n")
+cat("Number of polarity scores:", length(polarity_scores), "\n")
+
+# Check for any NA values post-filtering (if any were missed earlier)
+if (anyNA(comment_body_matrix) || anyNA(polarity_scores)) {
+  comment_body_matrix = comment_body_matrix[complete.cases(comment_body_matrix, polarity_scores), ]
+  polarity_scores = polarity_scores[complete.cases(comment_body_matrix, polarity_scores)]
+}
+
+# Recheck dimensions
+cat("Post-NA removal dimensions of comment_body_matrix:", dim(comment_body_matrix), "\n")
+cat("Post-NA removal number of polarity scores:", length(polarity_scores), "\n")
+
+
+```
+
+
+```{r}
+
+# Perform SVM analysis for each fold
+results = perform_svm_analysis(train_matrix = comment_body_matrix[-comment_folds_10[[1]], ],
+                                test_matrix = comment_body_matrix[comment_folds_10[[1]], ],
+                                train_labels = polarity_scores[-comment_folds_10[[1]]],
+                                test_labels = polarity_scores[comment_folds_10[[1]]])
+
+# Print the overall results
+print(results)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
