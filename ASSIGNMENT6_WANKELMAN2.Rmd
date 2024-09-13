@@ -1,0 +1,927 @@
+---
+title: "ASSIGNMENT6_WANKELMAN"
+output: pdf_document
+date: "2024-03-04"
+---
+1: In a few paragraphs, explain when and why dictionaries successfully measure that which they attempt to measure, when they do not, and the possible risks of analyzing text with dictionaries.
+* Things to consider: 
+*** Can a human-defined set of terms accurately measure sentiment or other topics?
+*** Are dictionaries good because they have low compute requirements?
+*** Have you heard or seen dictionaries or dictionary methods applied today?
+
+Dictionaries in text analysis are essential in quantifying constructs such as sentiment, stereotypes, or different emotional states from textual data. They operate on a relatively simple premise: a predefined list of words is associated with specific sentiments or topics, and the presence of these words in a text is used to infer the text's overall sentiment or thematic content. This approach has several advantages, including low computational requirements compared to more advanced natural language processing (NLP) techniques, making dictionaries particularly appealing for researchers with limited resources or needing quick analyses.
+
+However, the effectiveness of dictionaries in accurately measuring what they are supposed to measure varies significantly depending on the context and how the dictionary is constructed. For instance, when dictionaries are well-crafted with extensive validation from multiple professional sources and other measures, they can achieve higher levels of coverage and reliability, as illustrated in the development of stereotype content dictionaries using Wordnet and word embeddings. These dictionaries capture the most relevant responses, indicating their success in measuring the intended constructs.
+
+Yet, dictionaries have limitations. Their reliance on predefined word lists means they can miss nuances in language use, such as sarcasm, negation, or the evolving meanings of words over time. Additionally, words may have different meanings in different contexts, which a straightforward dictionary approach must accurately capture. For example, "cold" can refer to temperature, a personality trait, or an illness, which would be relevant in different analytical contexts. The static nature of dictionaries also means they may adapt well to new domains or slang with manual updates, posing challenges for analyzing texts from dynamic or evolving language environments, such as social media.
+
+Analyzing text with dictionaries carries risks, including the potential for over-representing particular sentiments or themes due to the dictionary's limitations in capturing language complexity. If the dictionary's coverage or the specificity of the context needs to be adequately considered, results can be misinterpreted. Furthermore, reliance on dictionaries might discourage deeper engagement with data that could reveal more nuanced insights, particularly in rich, open-ended text responses.
+
+Despite these challenges, dictionaries remain valuable in text analysis due to their ease of use, low computational demand, and the potential for high validity in specific contexts when carefully constructed and validated. The continued application and development of dictionaries, especially with advancements in automated dictionary creation and validation methods, underscore their relevance in text analysis. Yet, researchers must be mindful of their limitations, complementing dictionary-based approaches with other methods to ensure a comprehensive understanding of textual data.
+
+
+Loughran, T., & McDonald, B. (2011). When Is a Liability Not a Liability? Textual Analysis, Dictionaries, and 10-Ks. https://doi.org/10.1111/j.1540-6261.2010.01625.x
+
+Kim, H. (2022). Sentiment Analysis: Limits and Progress of the Syuzhet Package and Its Lexicons. Volume 16(Number 2). https://orcid.org/0000-0002-2049-7531
+
+Nicolas G, Bai X, Fiske ST. Comprehensive stereotype content dictionaries using a semi-automated method. Eur J Soc Psychol. 2021; 51: 178–196. https://doi.org/10.1002/ejsp.2724
+
+
+
+```{r}
+# Read in some data to analyze. In this case we reuse homework data
+# but hopefully you are starting to look at the final project data and may use that.
+
+# Lets look at the qdapDictionaries documentation (An important step often ignored)
+# https://cran.r-project.org/web/packages/qdapDictionaries/qdapDictionaries.pdf
+
+# Next we have to figure out what a dictionary even is
+# https://www.google.com/search?q=quanteda+dictionary
+# https://quanteda.io/reference/dictionary.html
+```
+
+```{r}
+#Checking to ensure pdftools is updated
+install.packages("pdftools")
+```
+
+```{r}
+# Load Libaraies
+library(quanteda)
+library (qdapDictionaries)
+library(quanteda.textstats)
+library(httr)
+library(httr2)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(wordcloud2)
+library(readtext)
+library(pdftools)
+library(tm)
+library(jsonview)
+library(ggplot2)
+library(readr)
+library(tidyr)
+```
+
+
+############################## ############################## 
+#### qdapDictionary Approach
+qdap is another set of packages that can be used together but we will be stickin with trusty Quanteda.
+############################## ############################## 
+
+```{r}
+# Select the correct qdap dictionary
+data(key.pol)
+#Check out what is in key.pol
+class(key.pol)
+key.pol
+
+```
+
+```{r}
+# key.pol is a data table and we saw that we need a dictionary format
+# The easiest way is to convert this table into a list
+
+# Check what are the possible values in key.pol
+unique(key.pol$y)
+# Just 1 for positive and -1 for negative
+
+```
+
+##########################
+#### Convert to a list
+##########################
+```{r}
+#Create a seperate list of positive and negative values for column x
+key_pol_list = list(
+  positive=key.pol[ which(y == 1), ]$x,
+  negative=key.pol[ which(y == -1), ]$x
+)
+
+```
+
+
+####################
+# Running into errors with downloaded PDFs, Going have to manually inspect each document
+####################
+
+### How is the US Pricing Carbon PDF
+```{r}
+#Inspect each PDF to ensure they can be correctly read.  From previous code we know How can we price carbon should be recognized. Starting with this doc
+how_is_the_us_pricing = pdf_text("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 6/Carbon_Article/How Is the US Pricing Carbon? How Could We Price Carbon?.pdf")
+
+```
+
+
+```{r}
+# Print the text of the tenth page to verify loaded the PDF
+cat(how_is_the_us_pricing[10]) 
+
+#https://stackoverflow.com/questions/39630212/pdftools-package-in-r-error-invalid-font-weight
+```
+
+```{r}
+# Another method I discovered for verifying the successful loading of the PDF document involves loading and examining portions of specific pages I wanted to test.
+# Print first 200 characters of first 15 pages with separators
+for (i in 1:15) {
+  cat(substr(how_is_the_us_pricing[i], 1, 200), "\n---\n")
+}
+
+#https://www.rdocumentation.org/packages/openintro/versions/2.4.0/topics/loop
+#https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/seq
+#https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/substr
+#https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/cat
+#https://support.sas.com/resources/papers/proceedings/proceedings/sugi25/25/cc/25p088.pdf
+```
+
+```{r}
+# create the corpus
+how_is_the_us_pricing_sentiment = corpus(how_is_the_us_pricing)
+how_is_the_us_pricing_sentiment
+```
+
+```{r}
+?tokens
+```
+
+```{r}
+# Tokenize the PDF document
+how_is_the_us_pricing_tokens = tokens(how_is_the_us_pricing_sentiment, 
+                                      remove_punct = TRUE, 
+                                      remove_numbers = TRUE, 
+                                      remove_symbols = TRUE) %>% 
+                               tokens_tolower()              
+
+# https://tutorials.quanteda.io/advanced-operations/targeted-dictionary-analysis/
+```
+
+```{r}
+# Overview of how PDF Document was Tokenized
+summary(how_is_the_us_pricing_sentiment)
+```
+
+############################## ############################## 
+# SentimentAnalysis Approach
+https://cran.r-project.org/web/packages/SentimentAnalysis/vignettes/SentimentAnalysis.html
+############################## ##############################
+```{r}
+#Load required library
+library(SentimentAnalysis)
+```
+
+####
+# Get the dictionary
+####
+
+```{r}
+# Check to see datasets available in the qdapDictionaries package
+data(package = "qdapDictionaries")
+
+```
+
+
+```{r}
+# Accessing the dictionaries from qdapDictionaries package
+data(DictionaryHE)
+data(DictionaryLM)
+DictionaryHE
+# Looks like it is close to the correct format
+class(DictionaryHE)
+# So close, its a list. Close enough though.
+```
+
+####
+# Apply sentiment dictionary
+####
+```{r}
+#Create a document feature matrix (dfm). Trying to quantify sentiment in texts using DictionaryHE
+sentiment_dict_result_how_is_us_pricing = dfm(how_is_the_us_pricing_sentiment, 
+   dictionary=dictionary(DictionaryHE))
+sentiment_dict_result_how_is_us_pricing
+
+class(sentiment_dict_result_how_is_us_pricing)
+```
+```{r}
+# Convert it to a data frame
+sentiment_dict_result_how_is_us_pricing_he = convert(sentiment_dict_result_how_is_us_pricing, to = "data.frame")
+
+# Summarize the sentiment counts
+how_is_us_pricing_df_summary_he = sentiment_dict_result_how_is_us_pricing_he %>%
+  summarise(
+    Positive = sum(positive),
+    Negative = sum(negative)
+  ) %>%
+  pivot_longer(
+    cols = c(Positive, Negative),
+    names_to = "Sentiment",
+    values_to = "Count"
+  )
+```
+
+
+```{r}
+# Now, use ggplot2 to create a bar plot of sentiment counts
+ggplot(how_is_us_pricing_df_summary_he, aes(x = Sentiment, y = Count, fill = Sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(
+    title = "Sentiment Analysis using DictionaryHE",
+    x = "Sentiment",
+    y = "Count"
+  )
+```
+
+
+```{r}
+#Create a document feature matrix (dfm). Trying to quantify sentiment in texts using DictionaryHE
+dfm(how_is_the_us_pricing_sentiment, 
+   dictionary=dictionary(DictionaryLM))
+
+#The LM analysis is showing 0 potential negative with 7 positive and 10 uncertain
+```
+
+```{r}
+# Convert it to a data frame
+sentiment_dict_result_how_is_us_pricing_lm = convert(dfm(how_is_the_us_pricing_sentiment, dictionary=dictionary(DictionaryLM)), to = "data.frame")
+
+# Summarize the sentiment counts
+how_is_us_pricing_df_summary_lm = sentiment_dict_result_how_is_us_pricing_lm %>%
+  summarise(
+    Positive = sum(positive),
+    Negative = sum(negative)
+  ) %>%
+  pivot_longer(
+    cols = c(Positive, Negative),
+    names_to = "Sentiment",
+    values_to = "Count"
+  )
+```
+
+
+```{r}
+ggplot(how_is_us_pricing_df_summary_lm, aes(x = Sentiment, y = Count, fill = Sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Sentiment Analysis Summary",
+       x = "Sentiment Type",
+       y = "Count",
+       fill = "Sentiment")
+```
+#### Question 2: Describe the results on your corpus. Do you find the results to be accurate? Why or why not?
+The sentiment analysis conducted on the how_is_the_us_pricing corpus with DictionaryHE and DictionaryLM has yielded what I believe to be insightful results. The analysis, indicates a predominant presence of positive sentiment within the corpus. The first graph, derived using DictionaryHE, shows a notably higher count of positive sentiments in comparison to negative ones. The second graph, derived using DictionaryLM demonstrates a similar trend, albeit with a marginally increased count of negative sentiments. I would infer that these results suggest that the corpus is characterized by a more positive than negative tone. The disparity between the positive and negative sentiment counts could reflect the corpus's subject matter or the sentiment expression style inherent to the texts analyzed. These findings can play a pivotal role in understanding the overall sentiment trend in the analyzed texts.
+
+
+
+####
+# Count the Words from the Dictionary I made specifically for Carbon pricing
+####
+```{r}
+#Load custom dictionary
+carbon_dictionary = read_csv("~/Desktop/JHU/Semester 2/Text to Data/Module 6/carbon_pricing_terms2.csv", 
+                             col_types = cols(Term = col_character())) # Used to remove a warning
+
+class(carbon_dictionary)
+
+```
+
+```{r}
+# The column 'Term' contains desired terms
+terms_dict = dictionary(list(
+  x = carbon_dictionary$Term %>% 
+        tolower() %>%  # Convert terms to lowercase
+        unique()       # Remove duplicate terms
+))
+
+terms_dict
+```
+
+```{r}
+# Remove stopwords from the tokens
+how_is_the_us_pricing_tokens_no_stopwords = tokens_remove(how_is_the_us_pricing_tokens, stopwords("en"), padding = FALSE)
+
+```
+
+
+```{r}
+# Apply the dictionary 
+how_is_the_us_pricing_keypol = tokens_lookup(how_is_the_us_pricing_tokens_no_stopwords, dictionary = terms_dict, exclusive = FALSE)
+
+```
+
+
+```{r}
+# Create a DFM 
+dfm_how_is_the_us_pricing_sentiment = dfm(how_is_the_us_pricing_keypol)
+
+```
+
+
+```{r}
+# inspect the DFM 
+dim(dfm_how_is_the_us_pricing_sentiment)
+
+```
+
+```{r}
+# Remove the 'x' feature from the DFM if not it will occur the most times 
+dfm_how_is_the_us_pricing_sentiment = dfm_remove(dfm_how_is_the_us_pricing_sentiment, "x")
+```
+
+
+```{r}
+# Calculate term frequencies
+term_counts_how_is_the_us_pricing_sentiment = textstat_frequency(dfm_how_is_the_us_pricing_sentiment)
+
+# Print the term frequency results
+print(term_counts_how_is_the_us_pricing_sentiment)
+```
+
+```{r}
+# Graph frequency of words with bar chart
+# Top 20 terms by frequency
+top_terms = head(term_counts_how_is_the_us_pricing_sentiment, 20)
+
+# Graph a bar chart with frequency of top 20 words
+ggplot(top_terms, aes(x=reorder(feature, -frequency), y=frequency, fill=feature)) +
+  geom_bar(stat="identity") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(y = "Frequency", 
+       x = "", 
+       title = "Top 20 Terms in US Pricing Sentiment Analysis", 
+       fill = "Term") +
+  guides(fill=FALSE) # Remove the legend
+ 
+
+#https://cbail.github.io/SICSS_Dictionary-Based_Text_Analysis.html
+#Data Viz Fall Semester
+```
+
+
+# Reaching For 2030: Climate and Energy Policy Priorities
+```{r}
+# Load PDF doc.  
+climate_energy_policy_priorities = pdf_text("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 6/Carbon_Article/reaching-for-2030-climate-and-energy-policy-priorities.pdf")
+cat(future_us_carbon_pricing[10])
+
+```
+
+```{r}
+# Print first 200 characters of first 15 pages
+for (i in 1:10) {
+  cat(substr(climate_energy_policy_priorities[i], 1, 200), "\n---\n")
+}
+
+```
+
+```{r}
+#Create corpus
+climate_energy_policy_priorities_sentiment = corpus(climate_energy_policy_priorities)
+climate_energy_policy_priorities_sentiment
+class(climate_energy_policy_priorities_sentiment)
+```
+
+```{r}
+#Tokenize corpus
+climate_energy_policy_priorities_tokens = tokens(climate_energy_policy_priorities_sentiment, 
+                                      remove_punct = TRUE, 
+                                      remove_numbers = TRUE, 
+                                      remove_symbols = TRUE) %>% 
+                               tokens_tolower()  
+
+
+# https://tutorials.quanteda.io/advanced-operations/targeted-dictionary-analysis/
+
+```
+
+
+```{r}
+#Check tokens
+summary(climate_energy_policy_priorities_sentiment)
+```
+
+
+############################## ############################## 
+# SentimentAnalysis Approach
+https://cran.r-project.org/web/packages/SentimentAnalysis/vignettes/SentimentAnalysis.html
+############################## ##############################
+
+```{r}
+#Load required library
+library(SentimentAnalysis)
+```
+
+```{r}
+#Get the dictionary
+data(DictionaryHE)
+data(DictionaryLM)
+DictionaryHE
+
+class(DictionaryHE)
+
+```
+
+```{r}
+# Apply sentiment dictionary HE
+sentiment_dict_result_climate_energy_policy_priorities = dfm(climate_energy_policy_priorities_sentiment, 
+   dictionary=dictionary(DictionaryHE))
+sentiment_dict_result_climate_energy_policy_priorities
+```
+
+```{r}
+# Apply sentiment dictionary LM
+dfm(climate_energy_policy_priorities_sentiment, 
+   dictionary=dictionary(DictionaryLM))
+
+```
+
+####
+# Count the Words from the Dictionary I made specifically for Carbon pricing
+####
+```{r}
+#Load custom dictionary
+carbon_dictionary = read_csv("~/Desktop/JHU/Semester 2/Text to Data/Module 6/carbon_pricing_terms2.csv", 
+                             col_types = cols(Term = col_character())) # Used to remove a warning
+
+class(carbon_dictionary)
+
+```
+
+```{r}
+# The column 'Term' contains desired terms
+terms_dict = dictionary(list(
+  x = carbon_dictionary$Term %>% 
+        tolower() %>%  # Convert terms to lowercase
+        unique()       # Remove duplicate terms
+))
+
+terms_dict
+```
+
+
+```{r}
+# Remove stopwords from the tokens
+climate_energy_policy_priorities_no_stopwords = tokens_remove(climate_energy_policy_priorities_tokens, stopwords("en"), padding = FALSE)
+
+```
+
+```{r}
+# Apply the dictionary via tokens_lookup to match and aggregate tokens according to the dictionary entries
+climate_energy_policy_priorities_keypol = tokens_lookup(climate_energy_policy_priorities_no_stopwords, dictionary = terms_dict, exclusive = FALSE)
+
+```
+
+
+```{r}
+# Create a DFM from the matched tokens
+dfm_climate_energy_policy_priorities_sentiment = dfm(climate_energy_policy_priorities_keypol)
+
+```
+
+
+```{r}
+# Directly inspect the DFM without reapplying the dictionary
+dim(dfm_climate_energy_policy_priorities_sentiment)
+
+```
+
+```{r}
+# Remove the 'x' feature from the DFM
+dfm_climate_energy_policy_priorities_sentiment = dfm_remove(dfm_climate_energy_policy_priorities_sentiment, "x")
+```
+
+
+```{r}
+# Calculate term frequencies
+term_counts_climate_energy_policy_priorities_sentiment = textstat_frequency(dfm_climate_energy_policy_priorities_sentiment)
+
+# Print the term frequency results
+print(term_counts_climate_energy_policy_priorities_sentiment)
+```
+
+
+
+```{r}
+# Graph a bar chart with frequency of words
+# Top 20 terms by frequency
+top_terms = head(term_counts_climate_energy_policy_priorities_sentiment, 20)
+
+# Graph a bar chart with frequency of top 20 words
+ggplot(top_terms, aes(x=reorder(feature, -frequency), y=frequency, fill=feature)) +
+  geom_bar(stat="identity") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(y = "Frequency", 
+       x = "", 
+       title = "Top 20 Terms in US Pricing Sentiment Analysis", 
+       fill = "Term") +
+  guides(fill=FALSE) # Remove the legend
+ 
+
+#https://cbail.github.io/SICSS_Dictionary-Based_Text_Analysis.html
+#Data Viz Fall Semester
+```
+
+
+#####################
+# Prepare Carbon  data
+######################
+Read in data,Preferably start working on data you collected for your project
+
+```{r}
+# I removed a document to reduce the PDF error: Invaid Font Weight. This was a process that took a lot of work and after going through each PDF file and trying to visualize them, I decided circle back an attempt doing all the PDFs at once.
+
+
+#Load Dataset folder
+carbon_cases_path = "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 6/Carbon_Article"
+
+carbon_cases_pdfs = readtext(paste0(carbon_cases_path, "/*.pdf"),
+                     encoding = "ISO-8859-1")
+
+# Check the structure of the PDF documents
+str(carbon_cases_pdfs)
+
+#Quantitative Analysis of Textual Data. Importing Data from Multiple Files. Retrieved February 12, 2024, from https://tutorials.quanteda.io/import-data/multiple-files/
+
+# I removed a document to reduce the PDF error: Invaid Font Weight
+```
+
+```{r}
+# Create a corpus from the PDF documents
+carbon_corpus = corpus(carbon_cases_pdfs$text)
+
+# Check the structure of corpus
+print(carbon_corpus)
+summary(carbon_corpus)
+
+#Quanteda Tutorials. Corpus. Retrieved February 12, 2024, from https://tutorials.quanteda.io/basic-operations/corpus/corpus/
+```
+
+```{r}
+?tokens
+```
+
+```{r}
+# Tokenize the PDFs corpus
+tokens_corpus_cases = tokens(carbon_corpus)
+```
+
+```{r}
+#Remove all punctuation from PDF corpus.
+clean_tokens_cases = tokens(tokens_corpus_cases,
+                        remove_punct = TRUE,
+                        remove_numbers = TRUE,
+                        remove_symbols = TRUE,
+                        remove_url = TRUE,
+                        remove_separators = TRUE,
+                        split_hyphens = TRUE)
+
+clean_tokens_cases
+clean_tokens_cases %>% dfm()
+
+#Quanteda Team. Tokens. quanteda. Retrieved February 12, 2024, from https://quanteda.io/reference/tokens.html
+```
+
+```{r}
+#Applying stopwords to PDF documents
+#https://stopwords.quanteda.io/
+
+stopwords::stopwords_getsources()
+stopwords::stopwords_getlanguages("snowball")
+?stopwords::stopwords
+stopwords::stopwords(source = "snowball", language = 'en')
+stopwords::stopwords(source = "nltk", language = 'en')
+
+class(stopwords::stopwords(source = "nltk", language = 'en'))
+
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+```{r}
+#Drop stopwords.
+clean_tokens_cases %>% 
+  tokens_remove(pattern = stopwords::stopwords(source = "nltk", language = 'en')) %>%
+  dfm() %>%
+  textstat_frequency(n=200)
+
+#Quanteda Initiative. Stopwords. Retrieved February 14, 2024, from https://stopwords.quanteda.io/
+```
+
+```{r}
+clean_tokens_cases %>%
+  tokens(tokens_corpus_cases,
+         remove_punct = TRUE,
+         remove_url = TRUE,
+         remove_separators = TRUE,
+         split_hyphens = TRUE) %>%
+  tokens_remove(pattern = stopwords::stopwords(source = "snowball", language = 'en')) %>%
+  dfm()
+
+#Butkevics, Janis. February 13, 2024. TAD Mod 3 [Video]. AS 470.643.81 SP24. Johns Hopkins University. https://livejohnshopkins.sharepoint.com/
+```
+
+############################## ############################## 
+# SentimentAnalysis Approach
+https://cran.r-project.org/web/packages/SentimentAnalysis/vignettes/SentimentAnalysis.html
+############################## ##############################
+
+
+```{r}
+#Get the dictionary
+data(DictionaryHE)
+data(DictionaryLM)
+DictionaryHE
+
+class(DictionaryHE)
+
+```
+
+```{r}
+# Apply sentiment dictionary HE
+sentiment_dict_result_carbon_corpus = dfm(clean_tokens_cases, 
+   dictionary=dictionary(DictionaryHE))
+sentiment_dict_result_carbon_corpus
+```
+
+```{r}
+# Convert it to a data frame
+sentiment_dict_result_carbon_corpus_he = convert(sentiment_dict_result_carbon_corpus, to = "data.frame")
+
+# Summarize the sentiment counts
+carbon_corpus_summary_he = sentiment_dict_result_carbon_corpus_he %>%
+  summarise(
+    Positive = sum(positive),
+    Negative = sum(negative)
+  ) %>%
+  pivot_longer(
+    cols = c(Positive, Negative),
+    names_to = "Sentiment",
+    values_to = "Count"
+  )
+```
+
+
+```{r}
+# Now, use ggplot2 to create a bar plot of sentiment counts
+ggplot(carbon_corpus_summary_he, aes(x = Sentiment, y = Count, fill = Sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(
+    title = "Sentiment Analysis using DictionaryHE",
+    x = "Sentiment",
+    y = "Count"
+  )
+```
+
+
+```{r}
+# Apply sentiment dictionary LM
+dfm(clean_tokens_cases, 
+   dictionary=dictionary(DictionaryLM))
+
+```
+
+
+```{r}
+# Convert it to a data frame
+sentiment_dict_result_carbon_corpus_lm = convert(dfm(sentiment_dict_result_carbon_corpus, dictionary=dictionary(DictionaryLM)), to = "data.frame")
+
+# Summarize the sentiment counts
+carbon_corpu_summary_lm = sentiment_dict_result_carbon_corpus_lm %>%
+  summarise(
+    Positive = sum(positive),
+    Negative = sum(negative)
+  ) %>%
+  pivot_longer(
+    cols = c(Positive, Negative),
+    names_to = "Sentiment",
+    values_to = "Count"
+  )
+```
+
+
+```{r}
+ggplot(carbon_corpu_summary_lm, aes(x = Sentiment, y = Count, fill = Sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Sentiment Analysis Summary",
+       x = "Sentiment Type",
+       y = "Count",
+       fill = "Sentiment")
+```
+
+
+
+
+
+####
+# Count the Words from the Dictionary I made specifically for Carbon pricing
+####
+```{r}
+#Load custom dictionary
+carbon_dictionary = read_csv("~/Desktop/JHU/Semester 2/Text to Data/Module 6/carbon_pricing_terms2.csv", 
+                             col_types = cols(Term = col_character())) # Used to remove a warning
+
+class(carbon_dictionary)
+
+```
+
+```{r}
+# The column 'Term' contains desired terms
+terms_dict = dictionary(list(
+  x = carbon_dictionary$Term %>% 
+        tolower() %>%  # Convert terms to lowercase
+        unique()       # Remove duplicate terms
+))
+
+terms_dict
+```
+
+
+```{r}
+# Remove stopwords from the tokens
+sentiment_dict_result_carbon_corpus_no_stopwords = tokens_remove(clean_tokens_cases, stopwords("en"), padding = FALSE)
+
+```
+
+```{r}
+# Apply the dictionary via tokens_lookup to match and aggregate tokens according to the dictionary entries
+carbon_corpus_keypol = tokens_lookup(sentiment_dict_result_carbon_corpus_no_stopwords, dictionary = terms_dict, exclusive = FALSE)
+
+```
+
+
+```{r}
+# Create a DFM from the matched tokens
+dfm_carbon_corpus_sentiment = dfm(carbon_corpus_keypol)
+
+```
+
+
+```{r}
+# Directly inspect the DFM without reapplying the dictionary
+dim(dfm_carbon_corpus_sentiment)
+
+```
+
+```{r}
+# Remove the 'x' feature from the DFM
+dfm_carbon_corpus_sentiment = dfm_remove(dfm_carbon_corpus_sentiment, "x")
+```
+
+
+```{r}
+# Calculate term frequencies
+term_counts_corpus_sentiment = textstat_frequency(dfm_carbon_corpus_sentiment)
+
+# Print the term frequency results
+print(term_counts_corpus_sentiment)
+```
+
+```{r}
+# Graph a bar chart with frequency of words
+# Top 20 terms by frequency
+top_terms = head(term_counts_corpus_sentiment, 20)
+
+# Graph a bar chart with frequency of top 20 words
+ggplot(top_terms, aes(x=reorder(feature, -frequency), y=frequency, fill=feature)) +
+  geom_bar(stat="identity") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(y = "Frequency", 
+       x = "", 
+       title = "Top 20 Terms in US Pricing Sentiment Analysis", 
+       fill = "Term") +
+  guides(fill=FALSE) # Remove the legend
+ 
+
+#https://cbail.github.io/SICSS_Dictionary-Based_Text_Analysis.html
+#Data Viz Fall Semester
+```
+
+```{r}
+
+
+```
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
