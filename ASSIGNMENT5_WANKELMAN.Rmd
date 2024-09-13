@@ -1,0 +1,251 @@
+---
+title: "ASSIGNMENT5_WANKELMAN"
+output: pdf_document
+date: "2024-02-26"
+---
+
+```{r}
+# Load our dictionaries
+install.packages("/Users/my_name/Downloads/topicmodels_0.2-1.tar.gz",repos=NULL,type="source")
+
+```
+
+```{r}
+# Load Libaraies
+library(quanteda)
+library(httr)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(wordcloud2)
+library(readtext)
+library(tm)
+library(jsonview)
+
+```
+
+#Question 1: Setup to deteremine Which Tweets from Nuclear Sentiment dataset mention Japan.
+```{r}
+# Read Nuclear Sentiment dataset CSV using basic read.csv
+# See for additional info: https://quanteda.io/reference/corpus.html
+nuclear_data_readcsv = read.csv("~/Desktop/JHU/Semester 2/Text to Data/Module 5/sentiment_nuclear_power _1_.csv",
+                            header = TRUE, # We have headers so set to TRUE
+                            stringsAsFactor = FALSE) # Make sure the text is retained as char
+
+
+# Quanteda requires some document name. In case of a CSV or similar format We will assign integers as document IDs.
+nuclear_data_readcsv$doc_id = seq.int(nrow(nuclear_data_readcsv))
+
+```
+
+
+#Question 1:  Which Tweets from Nuclear Sentiment dataset mention Japan.
+```{r}
+# Sometimes we may have a plural of words por not know specific characters in a word and can use quantifiers/ wildcards
+
+#*: matches at least 0 times.
+#+: matches at least 1 times.
+#?: matches at most 1 times.
+##{n}: matches exactly n times.
+#{n, }: matches at least n times.
+#{n,m}: matches between n and m times.
+
+grep(pattern = "Jap*", nuclear_data_readcsv$tweet_text, ignore.case = TRUE)
+
+grep(pattern = "Jap*", nuclear_data_readcsv$tweet_text, ignore.case = FALSE)
+
+
+grep(pattern = "Japa+", nuclear_data_readcsv$tweet_text, ignore.case = TRUE)
+
+grep(pattern = "Japa+", nuclear_data_readcsv$tweet_text, ignore.case = FALSE)
+     
+
+#RexEgg. Regex quickstart. Retrieved February 26, 2024, from https://www.rexegg.com/regex-quickstart.html
+
+#RStudio. Regular expressions cheatsheet. Retrieved February 26, 2024, from https://github.com/rstudio/cheatsheets/blob/main/regex.pdf
+
+
+```
+
+```{r}
+
+#^: matches the start of the string
+#$: matches the end os the string
+#\b: matches the empty string at either edge of a word. Don't confuse it with ^ $ which marks the edge of a string
+#\B: matches the empty string provided it is not at an edge of the word
+#\ are characters that need to be escaped with another \.
+# A single  \ will match a literal \ character while \\ will be used as RE expression
+
+grep(pattern = "an$", nuclear_data_readcsv$tweet_text, ignore.case = TRUE)
+
+grep(pattern = "an$", nuclear_data_readcsv$tweet_text, ignore.case = FALSE)
+
+#RexEgg. Regex quickstart. Retrieved February 26, 2024, from https://www.rexegg.com/regex-quickstart.html
+
+#RStudio. Regular expressions cheatsheet. Retrieved February 26, 2024, from https://github.com/rstudio/cheatsheets/blob/main/regex.pdf
+
+
+```
+
+```{r}
+# [ 0-9]: matches any digit
+# [123]: matches on digits 1,2,3
+# [a-z]: matches any lower case letter
+# [adTk]: You can also select which characters to match
+# [A-Z]: matches any upercase letters
+# [A-z]: matches any upper or lowercase letter
+#\w: matches any character
+#\W: matches any non-character
+#\D: matches any non-digit
+#\d: matches any digit
+#\s: matches any space
+#\S: matches any non-space
+#\n \r: match newline or carriage return
+
+
+# There are various wildcards and groupings that can be done with RE
+
+# . : Match any character except newline
+# * : Match cahracter(s) multiple times
+# [^x]: Don't match given character
+# aa | bb: match either aa OR bb
+#(): A limited capture group
+```
+
+```{r}
+#We can combine multiple RE commands in a single expression
+
+# Here we find a string that contains d and with any character after J and a
+# but it cannot be followed by any digits using ^.
+# Notice that location of ^ matters, before a character negates them
+# while following means at the start of a string.
+
+grep(pattern = "(J.a.[^0-9])", nuclear_data_readcsv$tweet_text, ignore.case = TRUE)
+
+grep(pattern = "(J.a.[^0-9])", nuclear_data_readcsv$tweet_text, ignore.case = FALSE)
+```
+
+#Question 2:   Remove all occurrences of Twitter usernames (@<username>) and hashtags (#<hashtag>) from the Nuclear Sentiment dataset from Week 3. 
+
+```{r}
+print(nuclear_data_readcsv$tweet_text[19])
+summary(nuclear_data_readcsv$tweet_text[19])
+```
+
+
+```{r}
+# Remove Twitter @username
+nuclear_data_cleaned = nuclear_data_readcsv %>%
+  mutate(tweet_text = gsub("@\\w+", "", tweet_text))
+
+# Remove hashtags
+nuclear_data_cleaned = nuclear_data_cleaned %>%
+  mutate(tweet_text = gsub("#[[:alnum:]_]+", "", tweet_text))
+```
+
+
+```{r}
+# Print the tweet text of the 19th entry to check for @ and #
+print(nuclear_data_cleaned$tweet_text[19])
+```
+
+```{r}
+# Assign document IDs - Assigning unique document IDs to each text entry is an important step before creating a corpus. Document IDs serve several purposes: Identification, Order Preservation, Analysis.
+nuclear_data_cleaned$doc_id = seq_along(nuclear_data_cleaned$tweet_text)
+
+#Feinerer, I., & Hornik, K. (n.d.). Text Mining Package 'tm'. Retrieved [Date you accessed the document], from https://cran.r-project.org/web/packages/tm/tm.pdf
+
+#Stack Overflow user. (2013, February 13). How can I manually set the document ID in a corpus? Stack Overflow. https://stackoverflow.com/questions/14852357/how-can-i-manually-set-the-document-id-in-a-corpus
+
+#Benoit, K., & others. Corpus. quanteda. Retrieved 2024, Feburary 27, from https://quanteda.io/reference/corpus.html
+
+#OpenAI. "Importance of Assigning Document IDs in Corpus Creation in R." Response to Query on Text Analysis with R. Received 2024, Feburary 26. ChatGPT Session.
+```
+
+
+```{r}
+# Create a corpus from Regex cleaned data
+cleaned_corpus = corpus(nuclear_data_cleaned, text_field = "tweet_text")
+
+```
+
+```{r}
+summary(cleaned_corpus)
+
+summary(cleaned_corpus[19])
+
+```
+
+#Question 3: Remove the (fake and inserted by your instructor) social security numbers in the Amazon Musical Instruments JSON ATTACHED TO THIS WEEK'S HOMEWORK.
+```{r}
+library(stringr)
+
+ndjson_review = ndjson::stream_in('/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 5/Musical_Instruments_5_SSN.json')
+ndjson_review
+
+# Basic subsetting guide: https://www.statmethods.net/management/subset.html
+```
+
+```{r}
+# Define a regex pattern (both XXX-XX-XXXX and XXX-XXX-XXXX patterns)
+ssn_pattern = "^(?!666|000|9\\d{2})\\d{3}-(?!00)\\d{2,3}-(?!0{4})\\d{4}$" #found this in Geeksforgeeks reference
+
+#GeeksforGeeks. How to Validate SSN (Social Security Number) Using Regular Expression. Retrieved 2024, Feburary 25, from https://www.geeksforgeeks.org/how-to-validate-ssn-social-security-number-using-regular-expression/
+
+#LearningDS. Text Data and Regular Expressions. Retrieved 2024, Feburary 26, from https://learningds.org/ch/13/text_regex.html
+
+#Goyvaerts, J., & Levithan, S. (2012). Regular Expressions Cookbook. O'Reilly Media. Retrieved 2024, Feburary 26, from https://learning.oreilly.com/library/view/regular-expressions-cookbook/9781449327453/ch04s12.html#validation-ssn-discussion
+```
+
+```{r}
+#Found this on GeeksforGeeks and thought I would try it in R to test if my ssn_pattern actually worked beofre applying it to Musical_instuments_5_SSN.json
+# Function to validate the SSN (Social Security Number)
+isValidSSN = function(str) {
+  
+  # If the SSN (Social Security Number) is empty return FALSE
+  if (str == "") {
+    return(FALSE)
+  }
+  
+  # Return TRUE if the SSN (Social Security Number) matches the Regex
+  if (str_detect(str, regex(ssn_pattern, ignore_case = TRUE))) {
+    return(TRUE)
+  } else {
+    return(FALSE)
+  }
+}
+
+# Driver Code
+# Test Case 1:
+str1 = "856-45-6789"
+print(isValidSSN(str1))
+
+# Test Case 2:
+str2 = "000-45-6789"
+print(isValidSSN(str2))
+
+# Test Case 3:
+str3 = "856-452-6789"
+print(isValidSSN(str3))
+
+# Test Case 4:
+str4 = "856-45-0000"
+print(isValidSSN(str4))
+
+#GeeksforGeeks. (n.d.). How to Validate SSN (Social Security Number) Using Regular Expression. Retrieved [date you accessed the resource], from https://www.geeksforgeeks.org/how-to-validate-ssn-social-security-number-using-regular-expression/
+
+```
+
+```{r}
+# Replace SSNs in the reviewText field with "REMOVED" to indicate SSN's that have been identified and removed
+ndjson_review$reviewText = sapply(ndjson_review$reviewText, function(text) {
+  str_replace_all(text, ssn_pattern, "REMOVED")
+})
+
+```
+
