@@ -1,0 +1,478 @@
+---
+title: "MICRO ECONOMICS"
+output: pdf_document
+date: "2024-03-15"
+---
+```{r}
+install.packages("base64enc")
+```
+
+```{r}
+# Load Libraries
+library(quanteda)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(readtext)
+library(tm)
+library(jsonview)
+library(quanteda)
+library(stopwords)
+library(stringr)
+library(ldatuning)
+library(plotly)
+library(tidyr)
+library(LDAvis)
+library(tsne)
+library(Rtsne)
+library(lda)
+library(base64enc)
+library(stats)
+library(httr)
+library(jsonlite)
+library(furrr) # For parallel processing, Speed up API call
+library(cluster)
+library(factoextra)
+library(stats)
+```
+
+```{r}
+# Required Libraries
+
+reddit_url = "https://www.reddit.com/api/v1/access_token"
+key = "WsclNrNPGYnm0lAcIk2Xaw"  
+secret = "ZTJzC_NHDUqjaEpABwdJRDY90FwwsQ"
+username = "PsychologyObvious81" 
+password = "Dominate2024{}!*"
+
+
+response = request("https://www.reddit.com/api/v1/access_token") |>
+  req_auth_basic(key, secret) |>
+  req_body_form(grant_type = "password", username = username, password = password) |>
+  req_perform()
+
+
+if (response$status_code == 200) {
+  content_list = resp_body_json(response)
+  token = content_list$access_token
+} else {
+  print(paste("Error with request, status code:", response$status_code))
+}
+
+#Reddit. Reddit API documentation. Retrieved from https://www.reddit.com/dev/api
+```
+
+
+
+
+  '"living paycheck to paycheck" America',
+  '"credit score" problems America',
+  '"loan defaults" "United States"',
+  '"eviction" "rental stress" America',
+  '"utility bills" debt America',
+  '"food insecurity" "financial strain" America',
+  '"wage stagnation" "cost of living" America',
+  '"economic inequality" America',
+  '"pandemic" "financial impact" America'
+
+
+```{r}
+# Set up parallel processing
+plan(multisession, workers = 3)
+
+# Initialize the dataframe to store results
+results_df = data.frame(
+  subreddit = character(),
+  post_id = character(),
+  post_title = character(),
+  post_body = character(),
+  post_date = character(), # Column for post date
+  comment_id = character(),
+  comment_body = character(),
+  comment_date = character(), # New column for comment date
+  stringsAsFactors = FALSE
+)
+
+# Define your subreddits and search queries
+subreddits <- c("PersonalFinance", "Bonds", "FinancialIndependence", "investing", "PovertyFinance", "Economics", "finance", "personalfinance", "StockMarket", "AskEconomics", "badeconomics")
+search_queries <- c(
+  '"financial strain" America',
+  '"foreclosures" "United States"',
+  '"high credit card debt" America',
+  '"economic hardship" America',
+  '"financial stress" America',
+  '"economic hardship" America',
+  '"financial stress" America',
+  '"household debt" "United States"',
+  '"personal finance" crisis America',
+  '"bankruptcy" America',
+  '"mortgage stress" America',
+  '"student loans" "financial burden" America',
+  '"unemployment" "economic impact" America'
+)
+
+for (subreddit in subreddits) {
+  for (search_query in search_queries) {
+    Sys.sleep(15) # Respect Reddit's rate limiting
+    
+    # Formulate the request URL with enhanced search parameters
+    url = sprintf("https://www.reddit.com/r/%s/search.json?q=%s&restrict_sr=1&sort=new&limit=100",
+                  subreddit, URLencode(search_query))
+    
+    response = httr::GET(url, httr::add_headers(Authorization = sprintf("Bearer %s", token),
+                                                `User-Agent` = sprintf("R:reddit.api.pull:v1.0 (by /u/%s)", username)))
+  
+    if (response$status_code == 200) {
+      content = jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE)
+      if (!is.null(content$data) && !is.null(content$data$children)) {
+        posts = content$data$children
+        for (post in posts) {
+          Sys.sleep(10)  # Delay for comments request
+          comments_url = paste0("https://www.reddit.com", post$data$permalink, ".json?limit=200")
+          comments_response = httr::GET(comments_url, httr::add_headers(Authorization = paste("Bearer", token), `User-Agent` = paste("R:reddit.api.pull:v1.0 (by /u/", username, ")")))
+          
+          if (comments_response$status_code == 200) {
+            comments_content = jsonlite::fromJSON(rawToChar(comments_response$content), simplifyVector = FALSE)
+            if (length(comments_content) >= 2 && !is.null(comments_content[[2]]$data) && !is.null(comments_content[[2]]$data$children)) {
+              comments = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$body)) x$data$body else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_ids = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$id)) x$data$id else NA, simplify = FALSE, USE.NAMES = FALSE)
+              comment_dates = sapply(comments_content[[2]]$data$children, function(x) if (!is.null(x$data$created_utc)) as.POSIXct(x$data$created_utc, origin="1970-01-01", tz="GMT") else NA, simplify = FALSE, USE.NAMES = FALSE)
+              
+              # Convert Unix timestamp to readable date for posts
+              post_date = as.POSIXct(post$data$created_utc, origin="1970-01-01", tz="GMT")
+              
+              if (length(comments) > 0) {  # Ensure there are comments before proceeding
+                for (i in seq_along(comments)) {
+                  temp_df = data.frame(
+                    subreddit = subreddit,
+                    post_id = post$data$id,
+                    post_title = post$data$title,
+                    post_body = post$data$selftext,
+                    post_date = post_date, # Add post date to the data frame
+                    comment_id = comment_ids[[i]],
+                    comment_body = comments[[i]],
+                    comment_date = comment_dates[[i]], # Add comment date to the data frame
+                    stringsAsFactors = FALSE
+                  )
+                  results_df = rbind(results_df, temp_df)
+                }
+              } else {  # No comments, but include post data anyway with NA for comment fields
+                temp_df = data.frame(
+                  subreddit = subreddit,
+                  post_id = post$data$id,
+                  post_title = post$data$title,
+                  post_body = post$data$selftext,
+                  post_date = post_date, # Add post date even for posts without comments
+                  comment_id = NA,
+                  comment_body = NA,
+                  comment_date = NA, # No comment date available
+                  stringsAsFactors = FALSE
+                )
+                results_df = rbind(results_df, temp_df)
+              }
+            }
+          }
+        }
+      } else {
+        print(paste("No data found for subreddit:", subreddit))
+      }
+    } else {
+      message("Request failed with status code: ", response$status_code, " for subreddit: /r/", subreddit)
+    }
+  }
+}
+
+# Write results to CSV with more descriptive filename and include date
+write.csv(results_df, sprintf("reddit_discussions_%s.csv", Sys.Date()), row.names = FALSE)
+
+
+#Citation to figure out how to successfully do a Reddit API pullrequest
+#Broman, K. (n.d.). APIs for social scientists. Bookdown. Retrieved from https://bookdown.org/paul/apis_for_social_scientists/reddit-api.html#prerequisites-15
+
+#Korkmaz, S. (2016, July 4). Accessing Web Data (JSON) in R using httr. DataScience+. Retrieved from https://datascienceplus.com/accessing-web-data-json-in-r-using-httr/
+
+#Wickham, H. Quickstart. httr. Retrieved from https://httr.r-lib.org/articles/quickstart.html
+
+#Reddit. OAuth2. GitHub. Retrieved from https://github.com/reddit-archive/reddit/wiki/OAuth2
+
+#rymur. Overview. Retrieved from https://rymur.github.io/overview
+
+#Reddit. Reddit Developer Services. Reddit Help. Retrieved from https://support.reddithelp.com/hc/en-us/articles/14945211791892-Reddit-Developer-Services
+
+#OpenAI. OpenAI. 03/10/2024 Retrieved from https://www.openai.com
+
+#AlpsCode. (2021, January 11). How to use Reddit API. AlpsCode. Retrieved from https://alpscode.com/blog/how-to-use-reddit-api/
+
+#rymur. Setup. Retrieved from https://rymur.github.io/setup 
+
+#Learn R. Reading CSV files. Retrieved from https://learn-r.org/r-tutorial/read-csv.php
+
+#R Documentation. write.table. Retrieved from https://www.rdocumentation.org/packages/utils/versions/3.6.2/topics/write.table
+
+```
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+```{r}
+#Load CSV
+financial_strain_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 9/reddit_discussions_2024-04-01.csv",
+                                stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(financial_strain_reddit)
+```
+
+```{r}
+head(financial_strain_reddit, n = 5)
+```
+
+```{r}
+#Check for NA
+anyNA(financial_strain_reddit$post_body)
+```
+
+```{r}
+#Check how many NA's
+sum(is.na(financial_strain_reddit$post_body))
+
+```
+
+
+
+```{r}
+# Clean and prepare the text
+
+#Clean comment text
+clean_post_text = cleaned_financial_strain_reddit %>%
+  mutate(
+    post_body = str_remove_all(post_body, "\\n"), # Remove all newline characters
+    post_body = str_remove_all(post_body, "\\r"), # Remove all occurrences of \r
+    post_body = str_remove_all(post_body, "\\t")  # Remove all tab characters
+  )
+
+head(clean_post_text, n=5)
+
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+# Remove duplicates based on 'post_body'
+clean_post_text = clean_post_text %>% 
+  distinct(post_body, .keep_all = TRUE)
+
+```
+
+```{r}
+# Create a corpus for the post_body text
+corpus_post = corpus(clean_post_text$post_body)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_body_trim = tokens(corpus_post, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+tokens_remove(pattern=stopwords('en'))
+dfm_body = dfm(tokens_body_trim) %>%
+dfm_trim(min_termfreq = 0.4, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.3,
+         docfreq_type = "prop")
+
+
+top_terms_body = dfm_body
+top_terms_body
+```
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+
+expanded_stopwords = c(
+  stopwords(language = 'en', source = 'snowball'),
+  stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords(language = 'en', source = 'smart'),
+  stopwords(language = 'en', source = 'marimo'),
+  stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just')
+  ) %>%
+  unique()
+```
+
+
+```{r}
+# Rerun the tokenize the corpus with extended stopwords
+tokens_body = tokens(corpus_post, remove_punct = TRUE, 
+          remove_url = TRUE, 
+          remove_numbers = TRUE,
+          remove_symbols = TRUE) %>%
+tokens_remove(pattern = expanded_stopwords)
+dfm_body = dfm(tokens_body) %>%
+dfm_trim(min_termfreq = 0.5, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.4, 
+         docfreq_type = "prop")
+
+top_terms = topfeatures(dfm_body, 30)
+print(top_terms)
+```
+
+```{r}
+# Create a vector graph from top words
+top_terms_df = data.frame(
+  term = names(top_terms),
+  frequency = top_terms
+)
+
+# Create a relevance score 
+top_terms_df$relevance = sqrt(top_terms_df$frequency)
+
+# Order the dataframe for better visualization
+top_terms_df = top_terms_df %>%
+  arrange(desc(frequency))
+
+# Now, create the bubble chart with the correct dataframe
+ggplot(top_terms_df, aes(x = reorder(term, frequency), y = frequency, size = relevance, color = term)) +
+  geom_point(alpha = 0.7) +  # Use alpha for better visibility
+  scale_color_viridis_d(begin = 0.2, end = 0.8, option = "C") + 
+  theme_minimal() +
+  labs(title = "Terms Frequency and Relevance", x = "Term", y = "Frequency") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+```
+
+
+```{r}
+post_body_matrix = convert(dfm_body, to = 'matrix')
+set.seed(123)
+```
+
+```{r}
+#Research the logic in number selection with code
+body_kmeans = kmeans(
+  x = post_body_matrix, # All operations are done on our DFM
+  center = 36, 
+  iter.max = 200 
+)
+```
+
+
+```{r}
+body_kmeans
+```
+
+
+
+```{r}
+#Add Cluster back in my CSV to view results
+clean_post_text$clusters = body_kmeans$cluster
+clean_post_text[, c('post_body', 'clusters')]
+```
+
+
+```{r}
+#Explore the output of a cluster
+clean_post_text %>% 
+  filter(clusters == 5) %>% 
+  select(post_body)
+```
+
+```{r}
+length(unique(clean_post_text$post_body))
+```
+
+```{r}
+?fviz_nbclust
+```
+```{r}
+# Check for NA, NaN, or Inf values in the dataset
+summary(clean_post_text) #  summary of the data,s
+# Check for any NA values in the entire dataframe
+anyNA(clean_post_text)
+
+# Again clean_post_text is a dataframe to avoid elbow error
+if("post_body" %in% names(clean_post_text)) {
+  # Check for NA values in a specific column
+  anyNA(clean_post_text$post_body)
+
+  # If you need to check for unique entries
+  length(unique(clean_post_text$post_body))
+}
+```
+
+```{r}
+#Had to take these steps because I kept getting this error: Error in do_one(nmeth) : NA/NaN/Inf in foreign function call (arg 1)
+post_body_matrix = convert(dfm_body, to = 'matrix')
+
+# Ensure there are no NA, NaN, or Inf values in this matrix
+post_body_matrix[is.na(post_body_matrix)] = 0
+post_body_matrix[is.nan(post_body_matrix)] = 0
+post_body_matrix[is.infinite(post_body_matrix)] = 0
+
+# Now create the elbow
+elbow = fviz_nbclust(post_body_matrix, # Use the numeric matrix here
+                      FUNcluster = kmeans,
+                      method = 'wss',
+                      k.max = 18,
+                      verbose = TRUE)
+elbow
+```
+The graph depicts the total within-cluster sum of square (WSS) values for different numbers of clusters, ranging from 1 to 18, to help identify the optimal number of clusters for k-means clustering. The WSS generally decreases as the number of clusters increases; however, the rate of decrease lessens as k grows larger. There's a significant drop from 1 to 2 clusters, and from there on, the decline in WSS becomes more gradual. The graph suggests that while increasing the number of clusters continuously lowers the WSS, the benefit of adding more clusters diminishes after a certain point, which could be used to identify the "elbow" in the curve — the point where adding more clusters does not result in substantial improvement in the coherence of the clusters.
+
+```{r}
+silhouette = fviz_nbclust(post_body_matrix,
+                          kmeans,
+                          method = 'silhouette',
+                          k.max = 18,
+                          verbose = TRUE)
+silhouette
+```
+The average silhouette width is highest for k=2, with a value above 0.8, indicating strong clustering. As k increases beyond 2, there's a marked drop in the silhouette width, suggesting that additional clusters are less distinct. The lowest point on the graph occurs at k=15, where the silhouette width dips to around 0.1, indicating poor clustering. Generally, the graph suggests that 2 is the optimal number of clusters for this particular dataset, as it has the highest silhouette score.
+
+
+
+```{r}
+post_body_pam = cluster::pam(
+  x = post_body_matrix,
+  k = 5,
+  diss = FALSE,
+  pamonce = 5,
+  cluster.only = TRUE,
+  trace.lev = 18
+)
+
+post_body_pam
+```
+this output is telling you how the PAM algorithm was applied to your dataset, how many clusters were formed, which observations were chosen as the most central (medoids) to each cluster, and the dissimilarity scores that reflect how well the data fits into these clusters.
+
+
+```{r}
+
+```
+
+
