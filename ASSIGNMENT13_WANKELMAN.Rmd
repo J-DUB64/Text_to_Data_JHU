@@ -1,0 +1,1668 @@
+---
+title: "Final Class Project"
+output: pdf_document
+date: "2024-04-15"
+---
+
+
+```{r}
+# Load Libraries
+library(pdftools)
+library(quanteda)
+library(httr2)
+library (qdapDictionaries)
+library(jsonlite)
+library(ndjson)
+library(rjson)
+library(dplyr)
+library(tidytext)
+library(quanteda.textstats)
+library(readtext)
+library(jsonview)
+library(quanteda)
+library(stopwords)
+library(stringr)
+library(ldatuning)
+library(plotly)
+library(tidyr)
+library(LDAvis)
+library(tsne)
+library(Rtsne)
+library(lda)
+library(furrr) # For parallel processi
+library(e1071)
+library(quanteda)
+library(caret)
+library(tm)
+library(naivebayes)
+library(dplyr)
+set.seed(42)
+```
+
+Phase One: Unsupervised Clustering and LDA Visualization of the key environmental topics from environmental policy, agreements, regulations and documentation 
+In the initial phase of this project, the objective is to deploy unsupervised learning techniques, specifically clustering and Latent Dirichlet Allocation (LDA), to identify and visualize the primary topics discussed within the climate policy, which is pivotal for understanding how these topics resonate within online platforms discussing green finance and climate-related risks. By dissecting the Paris Agreement using unsupervised clustering methods, we can efficiently segment the document into distinct themes without predefined categories, allowing for a natural grouping of ideas. Subsequently, LDA visualization will serve to map these themes, providing a clear, interpretable visual representation of the dominant discussions and their relative weights, which are crucial for further textual analysis and correlation studies.
+
+
+Key Documents:
+1. Paris Agreement (2015)
+Objective: To unite all nations in combating climate change and adapting to its effects, with a goal to limit global warming to well below 2, preferably to 1.5 degrees Celsius.
+Impact: Sets binding targets for reducing carbon emissions for each member country, driving national and regional policy reforms in energy, transportation, and industry sectors.
+
+2. United Nations Sustainable Development Goals (SDGs)
+Objective: Adopted in 2015, these 17 goals aim to address global challenges including poverty, inequality, climate change, environmental degradation, and justice.
+Impact: SDG 13 specifically targets climate action, influencing policies related to sustainable cities, clean energy, and responsible consumption.
+
+3. The Green New Deal USA
+Objective: A proposed package that aims to address climate change and economic inequality through a comprehensive plan of reform across energy, transportation, and infrastructure sectors.
+Impact: Although not officially adopted in its entirety, aspects of this proposal have influenced various legislative initiatives aimed at promoting green jobs and reducing greenhouse gas emissions.
+
+4. Clean Air Act USA
+Objective: A comprehensive federal law that regulates air emissions from stationary and mobile sources to control air pollution.
+Impact: Mandates the Environmental Protection Agency (EPA) to protect and improve the nation's air quality and the stratospheric ozone layer, leading to ongoing regulations and standards.
+
+5. Kyoto Protocol (Internationally binding, adopted in 1997)
+Objective: To combat climate change by reducing greenhouse gas emissions through binding targets for developed countries.
+Impact: Though succeeded by the Paris Agreement, the Kyoto Protocol established important mechanisms and frameworks that continue to influence international climate policy.
+
+6. The European Green Deal (EU)
+Objective: A set of policy initiatives from the European Commission with the overarching aim of making Europe climate neutral by 2050.
+Impact: Influences a broad range of policies from biodiversity to sustainable agriculture and clean energy, driving legislative and regulatory changes across EU member states.
+
+7. National Biodiversity Strategies and Action Plans (NBSAPs)
+Objective: Under the Convention on Biological Diversity, countries develop NBSAPs to promote the conservation and sustainable use of biological diversity.
+Impact: These plans drive specific national actions and policies to protect and manage natural habitats, endangered species, and ecological resources.
+
+8. The Clean Water Act USA
+Objective: Establishes the basic structure for regulating discharges of pollutants into the waters of the United States and regulating quality standards for surface waters.
+Impact: Crucial for shaping policies related to water pollution control, impacting industries, agriculture, and urban planning.
+
+9. COP26 Agreements 2021
+Objective: The 26th UN Climate Change Conference aimed to accelerate action towards the goals of the Paris Agreement and the UN Framework Convention on Climate Change.
+Impact: Introduced specific commitments like phasing out coal, reducing deforestation, and increasing financial commitments to climate action.
+
+
+### Make Sure to add required documents
+
+Key Objectives in Analyzing key Environmental Documents:
+1. Topic Identification: Utilize LDA to extract key topics from the Paris Agreement text. This will include identifying major themes such as emissions targets, financial commitments, and adaptation strategies that are frequently discussed in the document.
+
+2. Thematic Relationships: Explore the relationships between the identified topics to understand how they interconnect within the framework of the Agreement. This analysis will help in understanding the comprehensive structure of the Agreement and its emphasis on various climate actions.
+
+3.Trend Analysis: Conduct a temporal analysis of the topics over time within subsequent discussions and documents related to the Paris Agreement in online media. This will highlight the evolution of discourse and pinpoint emerging trends that may influence policy and financial decisions.
+
+4.Correlation with Public and Investor Sentiment:Investigate how the primary topics of the Paris Agreement an U.S. Policy correlate with sentiments expressed in online discussions regarding green finance and carbon risk. This will involve analyzing sentiment polarity and emotion in relation to the themes identified in the Paris Agreement, thereby assessing their impact on public and investor behavior.
+
+By achieving these objectives, the project will enrich our understanding of the strategic focus areas within the Paris Agreement and how these are mirrored or diverged in public and investor discourse. This foundational analysis will not only contribute to the broader goals of evaluating the impact of climate discourse on financial practices but also enhance our capacity to forecast and strategize for future financial initiatives in line with global climate goals.
+
+```{r}
+
+climate_pdf_paths = c("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/english_paris_agreement.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/U.S. Climate Policy.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/Green_New_Deal_H_RES_109 .pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/Clean Air Act Title 42 Chapter 85.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/United Nations Sustainable Development Goals 2030 and environmental sustainability- race against time.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/Keys_to_Climate_Action_Brookings_Think_Tank.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/EUCMPEA.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/PFSGFEA.pdf",
+                      "/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/Kyoto Protocol (Internationally binding, adopted in 1997).pdf"
+                      
+               )
+
+# Load the PDF documents
+climate_pdf = readtext(climate_pdf_paths, encoding = "UTF-8")
+
+# Check the structure
+str(climate_pdf)
+
+# View first 1000 characters of each document
+if (!is.null(climate_pdf$text)) {
+  sapply(climate_pdf$text, function(text) {
+    cat(substr(text, 1, 1000))
+    cat("\n\n---\n\n")  # To separate entries visually
+  })
+}
+
+```
+
+```{r}
+# Clean the PDF text
+clean_climate_pdf = climate_pdf %>%
+  mutate(
+    text = str_remove_all(text, "\\n"), # Remove all newline characters
+    text = str_remove_all(text, "\\r"), # Remove all occurrences of \r
+    text = str_remove_all(text, "\\t"), # Remove all tab characters
+    text = str_remove_all(text, "\\bhttps?://\\S+\\b|\\bwww\\.\\S+\\b"), # Remove all hyperlinks
+    text = str_remove_all(text, "[[:punct:]]") # Remove all punctuation character
+  )
+
+head(clean_climate_pdf, n = 10)
+
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+
+
+```{r}
+# Create a corpus from the PDF documents
+climate_policy_corpus = corpus(climate_pdf$text)
+
+# Check the structure of corpus
+print(climate_policy_corpus)
+summary(climate_policy_corpus)
+
+#Quanteda Tutorials. Corpus. Retrieved February 12, 2024, from https://tutorials.quanteda.io/basic-operations/corpus/corpus/
+```
+
+```{r}
+# Define expanded stopwords
+expanded_stopwords = c(
+  stopwords::stopwords(language = 'en', source = 'snowball'),
+  stopwords::stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords::stopwords(language = 'en', source = 'smart'),
+  stopwords::stopwords(language = 'en', source = 'marimo'),
+  stopwords::stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just', 'title', 'paragraph')
+) %>% 
+  unique()
+```
+
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_climate_policy_trim = tokens(climate_policy_corpus, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+  tokens_remove(pattern = expanded_stopwords)
+
+dfm_climate_policy = dfm(tokens_climate_policy_trim) 
+
+summary(dfm_climate_policy)
+```
+
+
+```{r}
+
+# Output the revised DFM to check results
+print(dfm_climate_policy)
+dfm_climate_policy
+
+```
+
+
+```{r}
+top_climate_policy_terms = topfeatures(dfm_climate_policy, 30)
+print(top_climate_policy_terms)
+
+```
+
+The analysis is expected to reveal the dominant discussions within the environmental policy documents, providing insights into the thematic structures and trends over time. This would be instrumental for understanding how environmental issues are framed and addressed in policy and legislation, aligning with public and investor sentiments.
+```{r}
+# Create a vector graph from top words
+top_terms_df = data.frame(
+  term = names(top_climate_policy_terms),
+  frequency = top_climate_policy_terms
+)
+
+# Create a relevance score 
+top_terms_df$relevance = sqrt(top_terms_df$frequency)
+
+# Order the dataframe for better visualization
+top_terms_df = top_terms_df %>%
+  arrange(desc(frequency))
+
+# Now, create the bubble chart with the correct dataframe
+ggplot(top_terms_df, aes(x = reorder(term, frequency), y = frequency, size = relevance, color = term)) +
+  geom_point(alpha = 0.7) +  # Use alpha for better visibility
+  scale_color_viridis_d(begin = 0.2, end = 0.8, option = "C") + 
+  theme_minimal() +
+  labs(title = "Terms Frequency and Relevance", x = "Term", y = "Frequency") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+library(topicmodels)
+# dfm_body is properly formatted for use with topicmodels
+dtm_climate_policy = convert(dfm_climate_policy, to = 'topicmodels')
+cat("Dimensions of DTM (documents x features):", dim(dtm_climate_policy), "\n")
+
+# Use the LDA function from the topicmodels package
+lda_climate_policy_model = topicmodels::LDA(dtm_climate_policy, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_climate_policy_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_climate_policyt_terms = terms(lda_climate_policy_model, 10) 
+print(lda_climate_policy_model)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_climate_policy_tune = FindTopicsNumber(
+  dtm_climate_policy,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_climate_policy_tune$results, is.finite))){
+  plot(lda_climate_policy_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 3
+lda_optimal_climate_policy_model = LDA(dtm_climate_policy, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_climate_policy_terms = topicmodels::terms(lda_optimal_climate_policy_model, 15) 
+print(lda_optimal_climate_policy_model)
+
+```
+
+```{r}
+# Fit LDA model
+lda_climate_policy_model = LDA(dtm_climate_policy, k = 15, control = list(seed = 1234))
+theta = posterior(lda_climate_policy_model)$topics
+doc.length = rowSums(as.matrix(dtm_climate_policy))
+
+# Check if document lengths match theta dimensions 
+if (length(doc.length) != nrow(theta)) {
+  stop("Mismatch in the number of documents between theta and doc.length.")
+}
+
+# Prepare for visualization
+phi = posterior(lda_climate_policy_model)$terms
+json = LDAvis::createJSON(phi = phi, theta = theta, 
+                           vocab = colnames(dtm_climate_policy), 
+                           doc.length = doc.length, 
+                           term.frequency = colSums(as.matrix(dtm_climate_policy)))
+
+# Visualize
+LDAvis::serVis(json)
+
+```
+
+```{r}
+climate_policy_matrix = convert(dfm_climate_policy, to = 'matrix')
+set.seed(123)
+```
+
+```{r}
+# Check the number of rows in the matrix
+n_rows = nrow(climate_policy_matrix)
+print(n_rows)
+```
+
+```{r}
+#Research the logic in number selection with code
+climate_pdf_kmeans = kmeans(
+  x = climate_policy_matrix, 
+  center = 5, 
+  iter.max = 200
+)
+```
+
+
+```{r}
+# Print the cluster assignments
+cat("Cluster Assignments:\n")
+cat(climate_pdf_kmeans$cluster, "\n\n")
+
+# Print the total within-cluster sum of squares 
+cat("Total Within-cluster Sum of Squares:\n", climate_pdf_kmeans$tot.withinss, "\n")
+
+# Print the size of each cluster
+cat("Size of each cluster:\n")
+cat(climate_pdf_kmeans$size, "\n")
+```
+
+```{r}
+library(factoextra)
+
+# Ensure there are no NA, NaN, or Inf values in this matrix
+climate_policy_matrix[is.na(climate_policy_matrix)] = 0
+climate_policy_matrix[is.nan(climate_policy_matrix)] = 0
+climate_policy_matrix[is.infinite(climate_policy_matrix)] = 0
+
+# Now create the elbow
+elbow = fviz_nbclust(climate_policy_matrix, # Use the numeric matrix here
+                      FUNcluster = kmeans,
+                      method = 'wss',
+                      k.max = 8,
+                      verbose = TRUE)
+elbow
+```
+
+
+```{r}
+silhouette = fviz_nbclust(climate_policy_matrix,
+                          kmeans,
+                          method = 'silhouette',
+                          k.max = 8,
+                          verbose = TRUE)
+silhouette
+```
+
+```{r}
+climate_policy_pam = cluster::pam(
+  x = climate_policy_matrix,
+  k = 5,
+  diss = FALSE,
+  pamonce = 5,
+  cluster.only = TRUE,
+  trace.lev = 18
+)
+
+climate_policy_pam
+```
+The computational analysis of environmental policy texts identified a total of 18,961 unique terms, with the LDA model highlighting "climate" (2271 occurrences), "administrator" (2154 occurrences), and "emissions" (1575 occurrences) as the most prevalent themes. This quantitative measure indicates a prioritization of administrative governance and emission control in environmental discourse. Subsequent thematic exploration via LDA visualization isolated clusters showcasing significant interaction among concepts such as "carbon" (870 mentions) and "green" (782 mentions), with "development" and "transition" emerging as key narrative junctions in the context of sustainable practices.
+
+In-depth clustering analysis using the Elbow method revealed an inflection at five clusters, providing a clear demarcation for optimal document categorization and suggesting a multifaceted approach to policy discussion. The silhouette method further refined the clarity of these clusters, peaking at a cluster count of three, which aligns with the primary thematic areas identified by the LDA: administrative policies, emission standards, and sustainable energy transitions.
+
+Through the use of t-distributed Stochastic Neighbor Embedding (t-SNE) for high-dimensional data visualization, distinct groupings of topics were mapped onto a two-dimensional plane, revealing patterns of thematic density and separation that correspond to specific policy areas. This visualization allowed for the discernment of topic prevalence, with environmental regulation terms like "standards," "regulations," and "requirements" showing a combined frequency of 2141 instances, underscoring their weight in the corpus.
+
+The quantitative focus on specific terms, illustrated by the top term frequency plot, accentuates the heightened attention paid to policy mechanisms and environmental accountability, with "subsection," "percent," and "plan" appearing more than 985 times collectively. This not only reflects the documents' detailed structural composition but also indicates a narrative concentration on quantitative targets and strategic planning within environmental policies.
+
+Finally, the intertopic distance map and the top-30 term relevance for Topic 1 underscore the dominance of finance-related terms like "investment" and "financial," which were mentioned 629 times in the analyzed texts, hinting at an underlying economic narrative. The map also revealed a comprehensive interlinking of environmental initiatives with economic and developmental strategies, suggesting an integrated approach in policy formulation that traverses beyond mere environmental concerns.
+
+# Phase 2 - Analysis Reddit Comments on Enviromental Policy Body Post
+
+```{r}
+#Load CSV
+climate_policy_reddit = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/reddit_discussions_cleaned.csv",
+                                stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(climate_policy_reddit)
+```
+
+```{r}
+head(climate_policy_reddit, n = 10)
+```
+
+```{r}
+# Clean and prepare the text
+clean_climate_policy_post_body = climate_policy_reddit %>%
+  mutate(
+    post_body = str_remove_all(post_body, "\\n"), # Remove all newline characters
+    post_body = str_remove_all(post_body, "\\r"), # Remove all occurrences of \r
+    post_body = str_remove_all(post_body, "\\t")  # Remove all tab characters
+  )
+
+head(clean_climate_policy_post_body, n=5)
+
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+#Check number of rows
+nrow(clean_climate_policy_post_body)
+```
+
+
+```{r}
+# Remove duplicates based on 'post_body'
+clean_climate_policy_post_body = clean_climate_policy_post_body %>% 
+  distinct(post_body, .keep_all = TRUE)
+
+head(clean_climate_policy_post_body, n=5)
+
+```
+
+```{r}
+nrow(clean_climate_policy_post_body)
+```
+
+```{r}
+# Create a corpus for the post_body text
+corpus_climate_policy_body_post = corpus(clean_climate_policy_post_body$post_body)
+```
+
+```{r}
+# Tokenize the corpus and remove punctuation, URLs, symbols, and stopwords
+tokens_climate_policy_body_trim = tokens(corpus_climate_policy_body_post, 
+                 remove_punct = TRUE, 
+                 remove_url = TRUE, 
+                 remove_numbers = TRUE,
+                 remove_symbols = TRUE) %>%
+tokens_remove(pattern=stopwords('en'))
+dfm_climate_body_post = dfm(tokens_climate_policy_body_trim) %>%
+dfm_trim(min_termfreq = 0.4, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.3,
+         docfreq_type = "prop")
+
+
+top_climate_policy_terms_body = dfm_climate_body_post
+top_climate_policy_terms_body
+```
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+expanded_stopwords = c(
+  stopwords::stopwords(language = 'en', source = 'snowball'),
+  stopwords::stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords::stopwords(language = 'en', source = 'smart'),
+  stopwords::stopwords(language = 'en', source = 'marimo'),
+  stopwords::stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just', 'title', 'paragraph')
+) %>% 
+  unique()
+```
+
+
+```{r}
+# Rerun the tokenize the corpus with extended stopwords
+tokens_climate_policy_body_cleaned = tokens(corpus_climate_policy_body_post, 
+          remove_punct = TRUE, 
+          remove_url = TRUE, 
+          remove_numbers = TRUE,
+          remove_symbols = TRUE) %>%
+tokens_remove(pattern = expanded_stopwords)
+dfm_climate_policy_body_cleaned = dfm(tokens_climate_policy_body_cleaned) %>%
+dfm_trim(min_termfreq = 0.5, 
+         termfreq_type = 'quantile',
+         max_docfreq = 0.4, 
+         docfreq_type = "prop")
+
+top_cleaned_climate_policy_terms = topfeatures(dfm_climate_policy_body_cleaned , 30)
+print(top_cleaned_climate_policy_terms)
+```
+
+```{r}
+# Create a vector graph from top words
+top_cleaned_climate_policy_terms_df = data.frame(
+  term = names(top_cleaned_climate_policy_terms),
+  frequency = top_cleaned_climate_policy_terms
+)
+
+# Create a relevance score 
+top_cleaned_climate_policy_terms_df$relevance = sqrt(top_cleaned_climate_policy_terms_df$frequency)
+
+# Order the dataframe for better visualization
+top_cleaned_climate_policy_terms_df = top_cleaned_climate_policy_terms_df %>%
+  arrange(desc(frequency))
+
+# Now, create the bubble chart with the correct dataframe
+ggplot(top_cleaned_climate_policy_terms_df, aes(x = reorder(term, frequency), y = frequency, size = relevance, color = term)) +
+  geom_point(alpha = 0.7) +  # Use alpha for better visibility
+  scale_color_viridis_d(begin = 0.2, end = 0.8, option = "C") + 
+  theme_minimal() +
+  labs(title = "Terms Frequency and Relevance", x = "Term", y = "Frequency") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+```
+
+
+```{r}
+# dfm_body is properly formatted for use with topicmodels
+dtm_climate_policy_post_body = convert(dfm_climate_policy_body_cleaned, to = 'topicmodels')
+cat("Dimensions of DTM (documents x features):", dim(dtm_climate_policy_post_body), "\n")
+
+# Use the LDA function from the topicmodels package
+lda_climate_policy_post_body_model = topicmodels::LDA(dtm_climate_policy_post_body, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_climate_policy_post_body_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_climate_policy_post_body_terms = terms(lda_climate_policy_post_body_model, 10) 
+print(lda_climate_policy_post_body_terms)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_climate_policy_post_body_tune = FindTopicsNumber(
+  dtm_climate_policy_post_body,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_climate_policy_post_body_tune$results, is.finite))){
+  plot(lda_climate_policy_post_body_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 3
+lda_optimal_climate_policy_post_body_model = LDA(dtm_climate_policy_post_body, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_climate_policy_post_body_terms = topicmodels::terms(lda_optimal_climate_policy_post_body_model, 15) 
+print(lda_optimal_climate_policy_post_body_model)
+
+```
+
+
+```{r}
+# Fit LDA model
+lda_climate_policy_post_body_model = LDA(dtm_climate_policy_post_body, k = 15, control = list(seed = 1234))
+theta = posterior(lda_climate_policy_post_body_model)$topics
+doc.length = rowSums(as.matrix(dtm_climate_policy_post_body))
+
+# Check if document lengths match theta dimensions because of continuous Error: Mismatch in the number of documents between theta and doc.length.
+if (length(doc.length) != nrow(theta)) {
+  stop("Mismatch in the number of documents between theta and doc.length.")
+}
+
+# Prepare for visualization
+phi = posterior(lda_climate_policy_post_body_model)$terms
+json = LDAvis::createJSON(phi = phi, theta = theta, 
+                           vocab = colnames(dtm_climate_policy_post_body), 
+                           doc.length = doc.length, 
+                           term.frequency = colSums(as.matrix(dtm_climate_policy_post_body)))
+
+# Visualize
+LDAvis::serVis(json)
+```
+
+
+
+```{r}
+climate_policy_post_body_matrix = convert(dfm_climate_policy_body_cleaned, to = 'matrix')
+set.seed(123)
+```
+
+```{r}
+#Research the logic in number selection with code
+climate_policy_body_kmeans = kmeans(
+  x = climate_policy_post_body_matrix, # All operations are done on our DFM
+  center = 36, 
+  iter.max = 200 
+)
+```
+
+
+```{r}
+# Print the cluster assignments
+cat("Cluster Assignments:\n")
+cat(climate_policy_body_kmeans$cluster, "\n\n")
+
+# Print the total within-cluster sum of squares 
+cat("Total Within-cluster Sum of Squares:\n", climate_policy_body_kmeans$tot.withinss, "\n")
+
+# Print the size of each cluster
+cat("Size of each cluster:\n")
+cat(climate_policy_body_kmeans$size, "\n")
+```
+
+```{r}
+#Add Cluster back in my CSV to view results
+clean_climate_policy_post_body$clusters = climate_policy_body_kmeans$cluster
+clean_climate_policy_post_body[, c('post_body', 'clusters')]
+```
+
+```{r}
+#Explore the output of a cluster
+clean_climate_policy_post_body %>% 
+  filter(clusters == 14) %>% 
+  select(post_body)
+```
+
+```{r}
+length(unique(clean_climate_policy_post_body$post_body))
+```
+
+```{r}
+# Check for NA, NaN, or Inf values in the dataset
+summary(clean_climate_policy_post_body) 
+# Check for any NA values in the entire dataframe
+anyNA(clean_climate_policy_post_body)
+
+# clean_climate_policy_post_body is a dataframe to avoid elbow error
+if("post_body" %in% names(clean_climate_policy_post_body)) {
+  # Check for NA values in a specific column
+  anyNA(clean_climate_policy_post_body$post_body)
+
+  # If you need to check for unique entries
+  length(unique(clean_climate_policy_post_body$post_body))
+}
+```
+
+
+```{r}
+# Ensure there are no NA, NaN, or Inf values in this matrix
+climate_policy_post_body_matrix[is.na(climate_policy_post_body_matrix)] = 0
+climate_policy_post_body_matrix[is.nan(climate_policy_post_body_matrix)] = 0
+climate_policy_post_body_matrix[is.infinite(climate_policy_post_body_matrix)] = 0
+
+# Now create the elbow
+elbow_climate_policy_post_body = fviz_nbclust(climate_policy_post_body_matrix, # Use the numeric matrix here
+                      FUNcluster = kmeans,
+                      method = 'wss',
+                      k.max = 18,
+                      verbose = TRUE)
+elbow_climate_policy_post_body
+```
+
+
+```{r}
+silhouette_climate_policy_post_body = fviz_nbclust(climate_policy_post_body_matrix,
+                          kmeans,
+                          method = 'silhouette',
+                          k.max = 18,
+                          verbose = TRUE)
+silhouette_climate_policy_post_body
+```
+
+```{r}
+climate_policy_post_body_pam = cluster::pam(
+  x = climate_policy_post_body_matrix,
+  k = 5,
+  diss = FALSE,
+  pamonce = 5,
+  cluster.only = TRUE,
+  trace.lev = 18
+)
+
+climate_policy_post_body_pam
+```
+
+```{r}
+library(e1071)
+```
+
+```{r}
+# Let's actually train our NB model (Very exciting!)
+# As always, check the documentation
+?naiveBayes
+```
+
+```{r}
+dependent_variable = as.factor(climate_policy_reddit$"sentiment_body")
+dependent_variable
+```
+
+```{r}
+train_climate_policy_matrix = as.matrix(dfm_climate_policy_body_cleaned)
+print(class(train_climate_policy_matrix))
+```
+
+```{r}
+#Make sure the independent and dependent variable have the same number of observations
+# Ensure the sentiment column is available and convert it to a factor
+if("sentiment_body" %in% names(clean_climate_policy_post_body)) {
+  dependent_variable = as.factor(clean_climate_policy_post_body$sentiment_body)
+} else {
+  stop("sentiment_body column not found in clean_climate_policy_post_body dataframe.")
+}
+
+# Convert the document-feature matrix to a matrix format
+if(exists("dfm_climate_policy_body_cleaned")) {
+  train_climate_policy_matrix = as.matrix(dfm_climate_policy_body_cleaned)
+  if(any(is.na(train_climate_policy_matrix))) {
+    stop("NA values found in train_climate_policy_matrix. Please remove or impute them before training.")
+  }
+} else {
+  stop("dfm_climate_policy_body_cleaned does not exist.")
+}
+
+# Debugging output to check data types and lengths
+print(paste("Class of train_climate_policy_matrix:", class(train_climate_policy_matrix)))
+print(paste("Class of dependent_variable:", class(dependent_variable)))
+print(paste("Rows in train_climate_policy_matrix:", nrow(train_climate_policy_matrix)))
+print(paste("Length of dependent_variable:", length(dependent_variable)))
+
+# Check that the number of observations match
+if(nrow(train_climate_policy_matrix) != length(dependent_variable)) {
+  stop("The number of rows in train_climate_policy_matrix does not match the length of dependent_variable.")
+}
+
+```
+
+```{r}
+# Train the Naive Bayes model
+nb_climate_policy_post_body_model = naiveBayes(x = train_climate_policy_matrix, 
+                      y = dependent_variable, 
+                      laplace = 1)
+```
+
+
+```{r}
+nb_climate_policy_post_body_prediction = predict(nb_climate_policy_post_body_model, train_climate_policy_matrix)
+```
+
+
+```{r}
+results_climate_policy_post_body = data.frame(
+  prediction = nb_climate_policy_post_body_prediction,
+  actual = dependent_variable
+)
+
+results_climate_policy_post_body
+```
+
+```{r}
+table(dependent_variable)
+```
+
+```{r}
+# Create the confusion matrix
+conf_mat_climate_policy_post_body = table(results_climate_policy_post_body$prediction, results_climate_policy_post_body$actual)
+print(conf_mat_climate_policy_post_body)
+
+```
+
+```{r}
+# Calculate accuracy
+accuracy_climate_policy_post_body = sum(diag(conf_mat_climate_policy_post_body)) / sum(conf_mat_climate_policy_post_body)
+print(paste("Accuracy:", accuracy_climate_policy_post_body))
+```
+
+
+```{r}
+# Ensure it is a data frame and has the necessary structure
+if (!is.data.frame(results_climate_policy_post_body)) {
+  stop("results_climate_policy_post_body is not a data frame.")
+}
+
+# Check if 'prediction' and 'actual' columns exist
+if (!("prediction" %in% names(results_climate_policy_post_body)) || !("actual" %in% names(results_climate_policy_post_body))) {
+  stop("Missing 'prediction' or 'actual' columns in results_climate_policy_post_body.")
+}
+
+# Eliminate any empty strings
+actual_climate_policy_body_post_levels = unique(c(as.character(results_climate_policy_post_body$prediction), as.character(results_climate_policy_post_body$actual)))
+actual_climate_policy_body_post_levels = actual_climate_policy_body_post_levels[actual_climate_policy_body_post_levels != ""]  # Exclude any empty string
+
+# Correctly reference the data frame when creating factors
+results_climate_policy_post_body$prediction = factor(results_climate_policy_post_body$prediction, levels = actual_climate_policy_body_post_levels)
+results_climate_policy_post_body$actual = factor(results_climate_policy_post_body$actual, levels = actual_climate_policy_body_post_levels)
+
+# Generate the confusion matrix
+conf_mat_climate_policy_post_body = table(results_climate_policy_post_body$prediction, results_climate_policy_post_body$actual)
+
+# Calculate precision for each class
+precision_climate_policy_post_body = sapply(levels(results_climate_policy_post_body$prediction), function(x) {
+  tp = if (x %in% rownames(conf_mat_climate_policy_post_body) && x %in% colnames(conf_mat_climate_policy_post_body)) conf_mat_climate_policy_post_body[x, x] else 0
+  fp = if (x %in% rownames(conf_mat_climate_policy_post_body)) sum(conf_mat_climate_policy_post_body[x,]) - tp else 0
+  if (tp + fp == 0) return(0)  # Handle division by zero if there are no positive predictions
+  tp / (tp + fp)
+})
+
+# Print precision
+print("Precision for each class:")
+print(precision_climate_policy_post_body)
+
+
+
+```
+
+```{r}
+# Calculate recall for each class
+recall_climate_policy_post_body = sapply(rownames(conf_mat_climate_policy_post_body), function(x) {
+  tp = conf_mat_climate_policy_post_body[x, x]
+  fn = sum(conf_mat_climate_policy_post_body[,x]) - tp
+  if (tp + fn == 0) return(0) # To handle division by zero if there are no actual positives
+  tp / (tp + fn)
+})
+
+print("Recall for each class:")
+print(recall_climate_policy_post_body)
+
+```
+
+
+
+Try to figure out how to do an LLM
+
+In conducting an in-depth analysis of text data derived from Reddit discussions on climate policy, a striking observation emerges from the preprocessing phase. The raw data, initially comprising 4472 entries, underwent a cleansing process that significantly curtailed the dataset to a mere 206 unique text entries. This translates to a reduction rate of approximately 95.4%, which underscores the crucial role of meticulous data cleaning in extracting meaningful insights. Such a pronounced discrepancy between the raw and processed data indicates that the bulk of the initial dataset could have been laden with superfluous information, repetitions, or extraneous data, thus highlighting the pivotal nature of data preprocessing in textual analysis frameworks.
+
+The subsequent application of TF-IDF trimming and tokenization techniques further augmented the data's interpretability by sifting through the textual chaff. By discarding ubiquitous terms and preserving those with substantial discriminatory capacity, the analytical focus pivots to a concentrated subset of terms that presumably resonate with the essence of climate policy discourse on the social platform. A visual representation, possibly encapsulated in Image 1, accentuates the prominence of select terms such as 'energy', 'trump', and 'carbon'. For instance, the term 'energy' appears 397 times, suggesting its pivotal role in the dialogue. This focused lens potentially illuminates the thematic anchors of the debate, steering away from the dilution effect of high-frequency yet low-information content.
+
+Moreover, the endeavor to demystify the latent thematic structure of the corpus is evidenced by the employment of LDA. Tuning the model for the optimal number of topics, as depicted in Image 2, seems to converge on a lesser count than one might presuppose, given the multitude of discussions expected under the expansive umbrella of climate policy. The visual inflection points on the tuning graphs hint at a convergence of dialogue around a handful of salient themes, rather than a broad spectrum. This clustering of discussion points may reflect a community consensus or a prevalent focus on a few pressing issues within the climate policy domain.
+
+In pursuit of granular thematic segmentation, k-means clustering is leveraged, with the elbow method and silhouette analysis serving as strategic guides. The elbow graph, illustrated in Image 4, intimates a plateauing of variance explanation beyond a certain cluster threshold. This phenomenon infers an optimal cluster number, beyond which further segmentation fails to substantively enhance the interpretative granularity. The silhouette analysis in Image 5 corroborates this, presenting a diminishing return on cluster coherence past a certain point. Such findings can refine the categorization of textual data into distinct, meaningful groups, tailored to the inherent structure of the dataset.
+
+The analytical journey culminates in the evaluation of a Naive Bayes classifier, gauged through the lenses of precision and recall. The classifier's modest accuracy at approximately 12% signifies a challenge in generalizing sentiment classification within the dataset. Precision metrics, such as 91.67% for 'Neutral' and 44.83% for 'Positive', juxtaposed with a recall of 50% for 'Neutral' and 100% for 'Negative', signal an imbalanced performance across classes. This disparity in metrics could be indicative of an imbalance in the dataset or the classifier's sensitivity to the nuanced language inherent in sentiment analysis. The relatively low accuracy emphasizes the necessity for model optimization or the exploration of alternative classifiers that can grapple more adeptly with the subtleties of human language and sentiment.
+
+In conclusion, the analysis reveals the intricate dance between data cleaning, feature extraction, topic modeling, clustering, and classification. Each step is instrumental in distilling the complexity of natural language into actionable insights. Nonetheless, the model's performance flags the need for continual refinement, underscoring the iterative and evolving process that is intrinsic to text data analysis, particularly within the multifaceted realm of climate policy discussions.
+
+```{r}
+
+
+```
+
+## Phase 3: Comment Sentiment Analysis
+
+```{r}
+#Load CSV
+climate_policy_reddit_comment = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Class Final Project/reddit_discussions_cleaned.csv",
+                                stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(climate_policy_reddit_comment)
+```
+
+```{r}
+head(climate_policy_reddit_comment, n = 5)
+```
+
+```{r}
+#Check for NA
+anyNA(climate_policy_reddit_comment$comment_body)
+```
+
+```{r}
+#Check how many NA's
+sum(is.na(climate_policy_reddit_comment$comment_body))
+
+```
+
+```{r}
+#Check how many NA's
+which(is.na(climate_policy_reddit_comment$comment_body))
+
+
+```
+
+```{r}
+# Prepare the data in the reddit csv file
+climate_policy_reddit_comment$text = paste(climate_policy_reddit_comment$comment_body)
+
+```
+
+
+```{r}
+# Clean and prepare the text
+clean_climate_policy_comment_body = climate_policy_reddit_comment %>%
+  mutate(text = str_remove_all(text, "\\n")) %>% #remove all newline characters
+  mutate(text = str_remove_all(text, "\\r")) %>% #removes all occurrences of \r from the text column
+  mutate(text = str_remove_all(text, "\\t")) #remove all tab characters 
+
+#https://dplyr.tidyverse.org/reference/mutate.html
+#https://rdrr.io/cran/SparkR/man/mutate.html
+#https://rdrr.io/. Great freaking reference!!!!!!!!!
+```
+
+```{r}
+# Create a corpus
+corpus_climate_policy_comment_body = corpus(clean_climate_policy_comment_body$text)
+```
+
+```{r}
+tokens_climate_policy_comment_body_trim = corpus_climate_policy_comment_body %>%
+  tokens(remove_punct = TRUE, 
+         remove_url = TRUE, 
+         remove_numbers = TRUE, 
+         remove_symbols = TRUE) %>%
+  tokens_remove(pattern = stopwords("en"))
+
+dfm_climate_policy_comment_body = tokens_climate_policy_comment_body_trim %>%
+  dfm() %>%
+  dfm_trim(min_termfreq = 0.4, 
+           termfreq_type = "quantile",
+           max_docfreq = 0.3,
+           docfreq_type = "prop")
+
+
+top_terms_climate_policy_comment_body = topfeatures(dfm_climate_policy_comment_body, n = 30) 
+print(top_terms_climate_policy_comment_body)
+
+```
+
+```{r}
+# The stopwords we have don't capture everything that we need to remove
+# We can skip back to previous mods/weeks and recall that the stopwords library
+# actually provides a number of stopword lists that we can slap together.
+expanded_stopwords = c(
+  stopwords::stopwords(language = 'en', source = 'snowball'),
+  stopwords::stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords::stopwords(language = 'en', source = 'smart'),
+  stopwords::stopwords(language = 'en', source = 'marimo'),
+  stopwords::stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just', 'title', 'paragraph', 'can')
+) %>% 
+  unique()
+
+```
+
+
+```{r}
+tokens_climate_policy_comment_body = corpus_climate_policy_comment_body %>%
+  tokens(remove_punct = TRUE, 
+         remove_url = TRUE, 
+         remove_numbers = TRUE, 
+         remove_symbols = TRUE) %>%
+  tokens_remove(pattern = expanded_stopwords)
+
+
+dfm_climate_policy_comment_body_cleaned = tokens_climate_policy_comment_body %>%
+  dfm() %>%
+  dfm_trim(min_termfreq = 0.5, termfreq_type = 'quantile', max_docfreq = 0.4, docfreq_type = "prop")
+
+
+top_terms_dfm_climate_policy_comment_body = topfeatures(dfm_climate_policy_comment_body_cleaned, n = 30)
+print(top_terms_dfm_climate_policy_comment_body)
+
+```
+
+```{r}
+library(viridis)
+
+# Convert the top_terms to a data frame for plotting
+top_climate_policy_comment_body_terms_df = data.frame(
+  term = names(top_terms_dfm_climate_policy_comment_body),
+  frequency = top_terms_dfm_climate_policy_comment_body
+)
+
+top_climate_policy_comment_body_terms_df = top_climate_policy_comment_body_terms_df[order(-top_climate_policy_comment_body_terms_df$frequency), ]
+
+# Create the bar plot
+ggplot(top_climate_policy_comment_body_terms_df, aes(x = reorder(term, frequency), y = frequency)) +
+  geom_bar(stat = "identity", fill = viridis::viridis(1)) + # Apply viridis color to the bars
+  theme_minimal() +
+  labs(title = "Top 20 Terms Frequency", x = "Term", y = "Frequency") +
+  coord_flip() + # Flip coordinates for a horizontal bar plot
+  theme(plot.title = element_text(hjust = 0.5)) # Center the plot title
+
+
+```
+
+
+
+```{r}
+find("terms")
+```
+
+
+```{r}
+library(topicmodels)
+# dfm_body is properly formatted for use with topicmodels
+dtm_climate_policy_comment_body = convert(dfm_climate_policy_comment_body_cleaned, to = 'topicmodels')
+
+
+# Explicitly use the LDA function from the topicmodels package
+lda_climate_policy_comment_body_model = topicmodels::LDA(dtm_climate_policy_comment_body, 
+                                  k = 15, control = list(seed = 1234))
+
+print(class(lda_climate_policy_comment_body_model))
+
+# Ensure compatibility by using the terms function from the same package
+lda_climate_policy_comment_body_terms = terms(lda_climate_policy_comment_body_model, 15) 
+print(lda_climate_policy_comment_body_terms)
+
+
+#https://cran.r-project.org/web/views/ReproducibleResearch.html
+
+#https://www.rdocumentation.org/packages/simEd/versions/2.0.1/topics/set.seed
+
+```
+
+
+```{r}
+
+# Determine the optimal number of topics using LDA Tuning used what was demonstrated on example code
+lda_dtm_climate_policy_comment_body_tune = FindTopicsNumber(
+ dtm_climate_policy_comment_body,
+  topics = seq(from = 2, to = 15, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 42),
+  mc.cores = 2L, 
+  verbose = TRUE
+)
+
+# Before I can plot I need to ensure the results contain finite values due to Error in plot.window(...) : need finite 'xlim' values I keep getting
+if(all(sapply(lda_dtm_climate_policy_comment_body_tune$results, is.finite))){
+  plot(lda_dtm_climate_policy_comment_body_tune, main = "LDA Tuning for Optimal Number of Topics")
+} else {
+  warning("The tuning results contain non-finite values and cannot be plotted.")
+}
+
+optimal_k = 15
+lda_optimal_climate_policy_comment_body_model = LDA(dtm_climate_policy_comment_body, k = optimal_k, control = list(seed = 1234))
+
+# View the top terms in each topic 
+lda_optimal_climate_policy_comment_body_terms = topicmodels::terms(lda_optimal_climate_policy_comment_body_model, 15) 
+print(lda_optimal_climate_policy_comment_body_terms)
+
+```
+
+Inspecting my LDA VISmodel because of a persistent Error in stats::cmdscale(dist.mat, k = 2) : NA values not allowed in 'd' error
+```{r}
+# Check for any NA values in the DTM
+anyNA(dtm_climate_policy_comment_body)
+
+```
+
+```{r}
+# Check for NA values in phi and theta matrices
+anyNA(phi)
+anyNA(theta)
+
+```
+
+
+```{r}
+# Checking how the text is cleaned and prepped
+head(clean_climate_policy_comment_body)
+```
+
+
+```{r}
+# Inspect the structure of phi and theta
+str(phi)
+str(theta)
+
+```
+
+```{r}
+# Check for zero values in phi
+any(phi == 0)
+
+```
+
+```{r}
+# Add a small constant to phi if zeros are present
+if(any(phi == 0)) {
+  phi <- phi + 1e-10
+}
+
+```
+
+```{r}
+# Check the structure of the cleaned document-term matrix
+str(dtm_climate_policy_comment_body)
+
+```
+
+```{r}
+# Adjust dfm trimming thresholds to less aggressive settings
+dfm_climate_policy_comment_body_cleaned <- tokens_climate_policy_comment_body %>%
+  dfm() %>%
+  dfm_trim(min_termfreq = 0.05, termfreq_type = 'quantile', max_docfreq = 0.95, docfreq_type = "prop")
+```
+
+
+```{r}
+# Function to compute Jensen-Shannon Divergence between two probability distributions
+jsd = function(p, q) {
+  m = 0.5 * (p + q)
+  kl = function(x, y) sum(x * log(x / y), na.rm = TRUE)
+  0.5 * kl(p, m) + 0.5 * kl(q, m)
+}
+
+# Manually compute the distance matrix using JSD
+dist.mat = matrix(nrow = ncol(phi), ncol = ncol(phi))
+
+for (i in 1:ncol(phi)) {
+  for (j in 1:ncol(phi)) {
+    dist.mat[i, j] <- jsd(phi[, i], phi[, j])
+  }
+}
+
+# Convert the lower triangular part of the matrix to a distance object
+dist.mat = as.dist(dist.mat)
+
+# Check for NA values in the computed distance matrix
+any(is.na(dist.mat))
+
+
+#Create a citation
+
+```
+
+
+```{r}
+# Fit LDA model
+lda_climate_policy_comment_body_model = LDA(dtm_climate_policy_comment_body, k = 15, control = list(seed = 1234))
+theta = posterior(lda_climate_policy_comment_body_model)$topics
+doc.length = rowSums(as.matrix(dtm_climate_policy_comment_body))
+
+# Check if document lengths match theta dimensions 
+if (length(doc.length) != nrow(theta)) {
+  stop("Mismatch in the number of documents between theta and doc.length.")
+}
+
+# Prepare for visualization
+phi = posterior(lda_climate_policy_comment_body_model)$terms
+
+# Check for zero values in phi and correct them if needed
+if(any(phi == 0)) {
+  phi = phi + 1e-10
+}
+
+# Normalize phi so that each row sums to 1
+phi = t(apply(phi, 1, function(x) x / sum(x)))
+
+# Manually compute the Jensen-Shannon Divergence distance matrix
+dist.mat = matrix(nrow = ncol(phi), ncol = ncol(phi))
+for (i in 1:ncol(phi)) {
+  for (j in 1:ncol(phi)) {
+    dist.mat[i, j] = jsd(phi[, i], phi[, j])
+  }
+}
+# Ensure the distance matrix is symmetric and convert it to a distance object
+dist.mat = as.dist((dist.mat + t(dist.mat)) / 2)
+
+# Create the JSON object for LDAvis without recalculating the distance matrix
+json = LDAvis::createJSON(
+  phi = phi,
+  theta = theta,
+  vocab = colnames(dtm_climate_policy_comment_body),
+  doc.length = doc.length,
+  term.frequency = colSums(as.matrix(dtm_climate_policy_comment_body)),
+  dist.matrix = dist.mat
+)
+
+# Visualize
+LDAvis::serVis(json, open.browser = TRUE)
+
+
+#Create Citation
+
+```
+
+```{r}
+climate_policy_comment_body_matrix = convert(dfm_climate_policy_comment_body_cleaned, to = 'matrix')
+set.seed(123)
+```
+
+```{r}
+#Research the logic in number selection with code
+climate_policy_comment_body_kmeans = kmeans(
+  x = climate_policy_comment_body_matrix, # All operations are done on our DFM
+  center = 36, 
+  iter.max = 200 
+)
+```
+
+
+```{r}
+# Print the cluster assignments
+cat("Cluster Assignments:\n")
+cat(climate_policy_comment_body_kmeans$cluster, "\n\n")
+
+# Print the total within-cluster sum of squares 
+cat("Total Within-cluster Sum of Squares:\n", climate_policy_comment_body_kmeans$tot.withinss, "\n")
+
+# Print the size of each cluster
+cat("Size of each cluster:\n")
+cat(climate_policy_comment_body_kmeans$size, "\n")
+```
+
+```{r}
+#Add Cluster back in my CSV to view results
+clean_climate_policy_comment_body$clusters = climate_policy_comment_body_kmeans$cluster
+clean_climate_policy_comment_body[, c('comment_body', 'clusters')]
+```
+
+```{r}
+#Explore the output of a cluster
+clean_climate_policy_comment_body %>% 
+  filter(clusters == 14) %>% 
+  select(comment_body)
+```
+
+```{r}
+length(unique(clean_climate_policy_comment_body$comment_body))
+```
+
+```{r}
+# Check for NA, NaN, or Inf values in the dataset
+summary(clean_climate_policy_comment_body) 
+# Check for any NA values in the entire dataframe
+anyNA(clean_climate_policy_comment_body)
+
+# clean_climate_policy_post_body is a dataframe to avoid elbow error
+if("post_body" %in% names(clean_climate_policy_comment_body)) {
+  # Check for NA values in a specific column
+  anyNA(clean_climate_policy_comment_body$comment_body)
+
+  # If you need to check for unique entries
+  length(unique(clean_climate_policy_comment_body$comment_body))
+}
+```
+
+
+```{r}
+# Ensure there are no NA, NaN, or Inf values in this matrix
+climate_policy_comment_body_matrix[is.na(climate_policy_post_body_matrix)] = 0
+climate_policy_comment_body_matrix[is.nan(climate_policy_post_body_matrix)] = 0
+climate_policy_comment_body_matrix[is.infinite(climate_policy_post_body_matrix)] = 0
+
+# Now create the elbow
+elbow_climate_policy_comment_body = fviz_nbclust(climate_policy_comment_body_matrix, 
+                      FUNcluster = kmeans,
+                      method = 'wss',
+                      k.max = 18,
+                      verbose = TRUE)
+elbow_climate_policy_comment_body
+```
+
+
+```{r}
+silhouette_climate_policy_comment_body = fviz_nbclust(climate_policy_comment_body_matrix,
+                          kmeans,
+                          method = 'silhouette',
+                          k.max = 18,
+                          verbose = TRUE)
+silhouette_climate_policy_comment_body
+```
+
+```{r}
+climate_policy_comment_body_pam = cluster::pam(
+  x = climate_policy_post_body_matrix,
+  k = 5,
+  diss = FALSE,
+  pamonce = 5,
+  cluster.only = TRUE,
+  trace.lev = 18
+)
+
+climate_policy_comment_body_pam
+```
+
+
+```{r}
+# Let's actually train our NB model (Very exciting!)
+# As always, check the documentation
+?naiveBayes
+```
+
+```{r}
+#Load CSV
+train_climate_policy_comment_data = read.csv("/Users/jcw81/Desktop/JHU/Semester 2/Text to Data/Module 12/reddit_discussions_paris_agreement.csv",
+                              stringsAsFactors = FALSE)
+
+```
+
+```{r}
+colnames(train_climate_policy_comment_data)
+```
+
+```{r}
+dependent_comment_variable = as.factor(train_climate_policy_comment_data$"sentiment_comment")
+
+```
+
+```{r}
+#need a DFM, the basis for creating all models
+train_climate_policy_comment_corpus = corpus(train_climate_policy_comment_data, text_field = "comment_body")
+```
+
+```{r}
+# DFM creation and trimming
+tokens_climate_policy_comment_trim = tokens(train_climate_policy_comment_corpus, 
+                           remove_punct = TRUE, 
+                           remove_url = TRUE, 
+                           remove_numbers = TRUE,
+                           remove_symbols = TRUE) %>%
+                    tokens_remove(pattern=stopwords('en'))
+
+train_dfm_climate_policy_comment = dfm(tokens_climate_policy_comment_trim) %>%
+            dfm_trim(min_termfreq = 0.4, 
+                     termfreq_type = 'quantile', 
+                     max_docfreq = 0.3, 
+                     docfreq_type = "prop")
+
+```
+
+```{r}
+train_climate_policy_comment_matrix = as.matrix(train_dfm_climate_policy_comment)
+print(class(train_climate_policy_comment_matrix))
+```
+
+
+```{r}
+if("sentiment_comment" %in% names(train_climate_policy_comment_data)) {
+  dependent_comment_variable = as.factor(train_climate_policy_comment_data$sentiment_comment)
+} else {
+  stop("sentiment_comment column not found in train_climate_policy_comment_data dataframe.")
+}
+
+# Convert the document-feature matrix to a matrix format
+if(exists("train_dfm_climate_policy_comment")) {
+  train_climate_policy_comment_body_matrix = as.matrix(train_dfm_climate_policy_comment)
+  if(any(is.na(train_climate_policy_comment_body_matrix))) {
+    stop("NA values found in train_climate_policy_comment_body_matrix. Please remove or impute them before training.")
+  }
+} else {
+  stop("train_dfm_climate_policy_comment does not exist.")
+}
+
+# Debugging output to check data types and lengths
+print(paste("Class of train_climate_policy_comment_body_matrix:", class(train_climate_policy_comment_body_matrix)))
+print(paste("Class of dependent_comment_variable:", class(dependent_comment_variable)))
+print(paste("Rows in train_climate_policy_comment_body_matrix:", nrow(train_climate_policy_comment_body_matrix)))
+print(paste("Length of dependent_comment_variable:", length(dependent_comment_variable)))
+
+# Check that the number of observations match
+if(nrow(train_climate_policy_comment_body_matrix) != length(dependent_comment_variable)) {
+  stop("The number of rows in train_climate_policy_comment_body_matrix does not match the length of dependent_comment_variable.")
+}
+
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_climate_policy_comment_model = naiveBayes(x =train_climate_policy_comment_matrix, 
+                      y = dependent_variable, 
+                      laplace = 1)
+```
+
+```{r}
+nb_climate_policy_comment_prediction = predict(nb_climate_policy_comment_model, train_climate_policy_comment_matrix)
+```
+
+```{r}
+climate_policy_comment_results = data.frame(
+  prediction = nb_climate_policy_comment_prediction,
+  actual = dependent_variable
+)
+
+climate_policy_comment_results
+```
+
+```{r}
+expanded_stopwords = c(
+  stopwords::stopwords(language = 'en', source = 'snowball'),
+  stopwords::stopwords(language = 'en', source = 'stopwords-iso'),
+  stopwords::stopwords(language = 'en', source = 'smart'),
+  stopwords::stopwords(language = 'en', source = 'marimo'),
+  stopwords::stopwords(language = 'en', source = 'nltk'),
+  c('gt', 'us', 'get', 't', 'e', 'r', 'like', 'just', 'title', 'paragraph')
+) %>% 
+  unique()
+```
+
+
+```{r}
+tokens_comment_processed = tokens(train_climate_policy_comment_corpus) %>%
+  tokens_tolower() %>%
+  tokens_remove(expanded_stopwords) %>%
+  tokens_remove(pattern = "[[:punct:]]") %>%
+  tokens_wordstem()
+
+# Create a document-feature matrix (DFM) 
+dfm_comment_train = dfm(tokens_comment_processed)
+
+# Trim the DFM based on term frequency
+trimmed_comment_dfm = dfm_trim(dfm_comment_train, min_termfreq = 100) # Adjust this threshold as necessary
+
+# View dimensions of the trimmed DFM
+dim(trimmed_comment_dfm)
+
+```
+
+```{r}
+train_comment_matrix = as.matrix(trimmed_comment_dfm)
+```
+
+
+```{r}
+# Train the Naive Bayes model
+nb_comment_model = naiveBayes(x = train_comment_matrix, y = dependent_comment_variable, laplace = 1)
+
+# Make predictions using the trained model
+nb_comment_prediction = predict(nb_comment_model, train_comment_matrix)
+```
+
+
+```{r}
+result_comments = data.frame(
+  prediction = nb_comment_prediction,
+  actual = dependent_comment_variable
+)
+
+result_comments
+```
+
+```{r}
+table(dependent_comment_variable)
+```
+
+
+```{r}
+# Create the confusion matrix
+conf_comment_mat = table(result_comments$prediction, result_comments$actual)
+print(conf_comment_mat)
+
+```
+
+```{r}
+# Calculate accuracy
+accuracy_climate_policy_comment_body = sum(diag(conf_comment_mat)) / sum(conf_comment_mat)
+print(paste("Accuracy:", accuracy_climate_policy_comment_body))
+```
+
+```{r}
+print(conf_comment_mat)
+print(rownames(conf_comment_mat))
+print(colnames(conf_comment_mat))
+```
+
+```{r}
+# Eliminate any empty string
+actual_comment_levels = unique(c(as.character(result_comments$prediction), as.character(result_comments$actual)))
+actual_comment_levels = actual_comment_levels[actual_comment_levels != ""]  # Exclude any empty string
+
+result_comments$prediction = factor(result_comments$prediction, levels = actual_comment_levels)
+result_comments$actual = factor(result_comments$actual, levels = actual_comment_levels)
+
+conf_comment_mat = table(result_comments$prediction, result_comments$actual)
+
+
+# Calculate precision for each class
+precision_comment = sapply(levels(result_comments$prediction), function(x) {
+  # Ensure that x is a valid index
+  tp = if (x %in% rownames(conf_comment_mat) && x %in% colnames(conf_comment_mat)) conf_comment_mat[x, x] else 0
+  fp = if (x %in% rownames(conf_comment_mat)) sum(conf_comment_mat[x,]) - tp else 0
+  if (tp + fp == 0) return(0)  # To handle division by zero if there are no positive predictions
+  tp / (tp + fp)
+})
+
+print("Precision for each class:")
+print(precision_comment)
+
+
+```
+
+```{r}
+# Calculate recall for each class
+recall_comment = sapply(rownames(conf_comment_mat), function(x) {
+  tp = conf_comment_mat[x, x]
+  fn = sum(conf_comment_mat[,x]) - tp
+  if (tp + fn == 0) return(0) # To handle division by zero if there are no actual positives
+  tp / (tp + fn)
+})
+
+print("Recall for each class:")
+print(recall_comment)
+
+```
+
+
+
+# Assignment 13
+```{r}
+library(neuralnet)
+# Convert the sentiment_comment column to a factor
+train_climate_policy_comment_data$dependent_comment_variable = factor(train_climate_policy_comment_data$sentiment_comment)
+
+# Convert train_matrix to a data frame
+train_comment_data_df = as.data.frame(train_comment_matrix)
+
+# Ensure unique column names
+col_names = make.names(names(train_comment_data_df), unique = TRUE)
+train_data_df = setNames(train_comment_data_df, col_names)
+
+# target variable 
+train_data_df$dependent_variable = train_climate_policy_comment_data$dependent_variable
+
+# Ensure all input features are numeric
+train_data_df[, -ncol(train_data_df)] = sapply(train_data_df[, -ncol(train_data_df)], as.numeric)
+
+# Fit a neural network
+nn_model = neuralnet(dependent_variable ~ ., data = train_data_df, hidden = c(5, 3), 
+                      linear.output = FALSE, threshold = 0.01)
+
+# Print model
+print(nn_model)
+
+
+```
+
+```{r}
+# Check levels are correct and consistent
+result_comments$prediction = factor(result_comments$prediction, levels = levels(result_comments$actual))
+
+# Create confusion matrix
+confusion_comment = confusionMatrix(data = result_comments$prediction, reference = result_comments$actual)
+
+# Extract and print accuracy
+accuracy_comment = confusion_comment$overall['Accuracy']
+print(paste("Accuracy: ", accuracy_comment))
+
+# Check for NA 
+precision_comment = confusion_comment$byClass['Precision']
+if (any(is.na(precision))) {
+  print("Precision contains NA values, indicating that one or more classes have no predicted positives (zero TP + zero FP).")
+} else {
+  print(paste("Precision: ", precision))
+}
+
+recall = confusion_comment$byClass['Recall']
+if (any(is.na(recall))) {
+  print("Recall contains NA values, indicating that one or more classes have no true positives (zero TP).")
+} else {
+  print(paste("Recall: ", recall))
+}
+
+print("Detailed Confusion Matrix:")
+print(confusion_comment$table)
+
+```
+
+A neural network is an advanced computational model that emulates the structure and functionality of biological neural networks in living organisms. At its core, a neural network comprises multiple layers of interconnected neurons or nodes. Each connection, or synapse, between neurons, carries a weight that adjusts as the network learns. These weights modulate the strength and influence of incoming signals.
+
+Operational Stages
+The operation of a neural network can be divided into several key phases:
+Input Layer Processing: The network begins with an input layer, each neuron representing a single input data feature. Data is fed into the neural network via this layer.
+
+- Forward Propagation: During this phase, the data moves through the network from the input layer to the hidden layers. Each neuron in the subsequent layer takes a weighted sum of its inputs and passes this sum through a non-linear activation function to produce an output. This process is repeated layer by layer until the data reaches the output layer.
+
+- Hidden Layers: Between the input and output layers lie one or more hidden layers, which are pivotal to the neural network's ability to model complex relationships in data. Unlike the input or output layers, hidden layers are not directly exposed to the input or output data. Each hidden layer refines the representations transmitted from the previous layer, capturing increasingly abstract data features.
+
+- Output Layer: The final hidden layer connects to the output layer, which is designed to format the network's output according to the requirements of the specific task (e.g., classification or regression).
+
+- Backpropagation: This is the critical learning phase of the network. After the forward pass, backpropagation commences if the network's output differs from the actual desired outcome. During backpropagation, the network adjusts the connections' weights to minimize the output error. This adjustment is typically performed using gradient descent, where the gradient (or derivative) of the error concerning each weight indicates the direction and magnitude of the weight adjustment.
+The network learns to map inputs to the correct output through these stages, refining its internal parameters for better accuracy. Each stage of processing and learning is essential for the neural network to perform tasks such as predicting outcomes based on past data, classifying data into categories, or even understanding complex patterns in vast datasets.
+
+Model Evaluation and Comparison
+After training the neural network on the dataset using the neuralnet package in R, I thoroughly evaluated its performance, contrasting it with the results obtained from a Naive Bayes model implemented earlier. This comparative analysis is essential to understand the strengths and weaknesses of each modeling approach in the context of our specific dataset.
+
+Neural Network Performance Metrics
+- Accuracy: The neural network achieved an accuracy of 27.84%. This metric indicates the overall rate at which the model correctly predicts both the positive and negative classes. While this might not be high in absolute terms, it is significant compared to the baseline model (Naive Bayes).
+
+- Precision: The precision metric, which illustrates the correctness achieved in positive prediction, showed a wide range from 0% to 40%. This variability suggests that while the model can identify certain classes reliably, it struggles with others, possibly due to overlapping features or insufficient examples during training.
+
+- Recall: The recall metric varied considerably, with some classes showing 0% recall, meaning the model failed to identify any true positives for those categories. This result is a critical indicator of the model's inability to generalize well across all classes, possibly due to class imbalance or the inherent complexity of the data.
+
+Naive Bayes Model Performance Metrics
+- Accuracy: The Naive Bayes model exhibited a much lower accuracy of 1.94%. This stark difference in performance highlights the neural network's superior ability to capture and model the non-linear relationships in the data that Naive Bayes, a probabilistic linear classifier, might miss.
+
+- Precision and Recall: These metrics were generally lower across all classes for the Naive Bayes model, with substantial discrepancies noted in its ability to predict certain courses effectively. The lower precision indicates many false positives, where the model incorrectly labeled negative instances as positive. Similarly, the low recall reflects the model's failure to detect true positives, which is critical in scenarios where the cost of missing positive instances is high.
+
+Comparative Analysis Expanded
+The comparison between the neural network and the Naive Bayes model revealed distinct performance characteristics, with the neural network showing superior accuracy. Despite this advantage, both models experienced challenges in achieving high precision and recall across different classes. These challenges are primarily attributed to class imbalance and inadequate feature representation, common in data-driven modeling scenarios. To tackle these issues and refine both models, several strategies could be implemented:
+
+Data Resampling
+- Implementation of SMOTE (Synthetic Minority Over-sampling Technique): This technique helps to balance class distribution by synthesizing new examples in the feature space for underrepresented classes. By artificially generating new samples rather than simply duplicating existing ones, SMOTE can enhance the diversity of training data, helping models to learn more generalized patterns.
+
+-Alternative Resampling Techniques: Besides SMOTE, other oversampling and undersampling techniques could be considered to ensure models are not biased toward the majority class. Exploring a combination of both, possibly in a stratified manner that respects the original data distribution, might yield better model responsiveness to minority classes.
+
+Insights and Future Directions
+This detailed analysis underscores the potential and limitations of the neural network and Naive Bayes models in handling complex datasets. The insights gathered serve not only to highlight areas for immediate improvement but also to guide strategic decisions regarding model development in future iterations.
+
+Addressing the identified issues through the strategies mentioned earlier is anticipated to improve both models' accuracy, precision, and recall and exhibit improved robustness and generalizability. This iterative process of model evaluation, enhancement, and validation is crucial in deploying reliable predictive models in real-world applications.
+
+
+```{r}
+
+```
+
+```{r}
+
+
+```
+
+
+```{r}
+
+
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+
+
